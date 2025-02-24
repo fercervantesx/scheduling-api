@@ -15,24 +15,26 @@ declare global {
   }
 }
 
-export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.auth?.payload.sub) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Unauthorized: No user ID found',
       });
+      return;
     }
 
     const auth0 = await getAuth0ManagementClient();
-    const user = await auth0.getUser({ id: req.auth.payload.sub });
+    const user = await auth0.users.get({ id: req.auth.payload.sub });
 
     // Check if user has admin role
-    const isAdmin = user.app_metadata?.role === 'admin';
+    const isAdmin = user.data.app_metadata?.role === 'admin';
 
     if (!isAdmin) {
-      return res.status(403).json({
+      res.status(403).json({
         error: 'Forbidden: Admin access required',
       });
+      return;
     }
 
     next();

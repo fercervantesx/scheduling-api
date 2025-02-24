@@ -2,6 +2,15 @@ import { prisma } from '../lib/prisma';
 import { PLANS } from '../config/tenant-plans';
 import { sendEmail } from '../utils/email';
 import { addDays, subDays, isAfter } from 'date-fns';
+import { Prisma } from '@prisma/client';
+
+interface TenantWithEmail {
+  id: string;
+  name: string;
+  email: string | null;
+  trialEndsAt: Date;
+  status: string;
+}
 
 export class TrialManagementService {
   private static REMINDER_DAYS = [7, 3, 1]; // Days before trial ends to send reminders
@@ -20,26 +29,41 @@ export class TrialManagementService {
           not: null,
         },
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        trialEndsAt: true,
+        status: true,
+      }
     });
 
     for (const tenant of trialTenants) {
       if (!tenant.trialEndsAt) continue;
 
+      const tenantWithEmail: TenantWithEmail = {
+        id: tenant.id,
+        name: tenant.name,
+        email: tenant.email,
+        trialEndsAt: tenant.trialEndsAt,
+        status: tenant.status,
+      };
+
       // Check if trial has expired
       if (isAfter(today, tenant.trialEndsAt)) {
-        await this.handleTrialExpiration(tenant);
+        await this.handleTrialExpiration(tenantWithEmail);
         continue;
       }
 
       // Send reminders before trial expiration
-      await this.sendTrialReminders(tenant);
+      await this.sendTrialReminders(tenantWithEmail);
     }
   }
 
   /**
    * Handle trial expiration for a tenant
    */
-  private static async handleTrialExpiration(tenant: { id: string; name: string; email?: string }) {
+  private static async handleTrialExpiration(tenant: TenantWithEmail) {
     // Update tenant status
     await prisma.tenant.update({
       where: { id: tenant.id },
@@ -65,8 +89,10 @@ export class TrialManagementService {
   /**
    * Send trial reminder emails
    */
-  private static async sendTrialReminders(tenant: { id: string; name: string; email?: string; trialEndsAt: Date }) {
+  private static async sendTrialReminders(tenant: TenantWithEmail) {
     const today = new Date();
+
+    if (!tenant.trialEndsAt || !tenant.email) return;
 
     for (const daysLeft of this.REMINDER_DAYS) {
       const reminderDate = subDays(tenant.trialEndsAt, daysLeft);
@@ -75,8 +101,7 @@ export class TrialManagementService {
       if (
         reminderDate.getDate() === today.getDate() &&
         reminderDate.getMonth() === today.getMonth() &&
-        reminderDate.getFullYear() === today.getFullYear() &&
-        tenant.email
+        reminderDate.getFullYear() === today.getFullYear()
       ) {
         await sendEmail({
           to: tenant.email,
@@ -106,14 +131,19 @@ export class TrialManagementService {
         status: 'TRIAL',
         plan: planId,
         trialEndsAt,
-        features: plan.features,
+        features: plan.features as Prisma.InputJsonValue,
       },
     });
 
     // Get tenant details for welcome email
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { name: true, email: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        trialEndsAt: true,
+      }
     });
 
     if (tenant?.email) {
@@ -153,17 +183,15 @@ export class TrialManagementService {
       },
     });
 
-    if (tenant.email) {
-      await sendEmail({
-        to: tenant.email,
-        subject: 'Your Trial Has Been Extended',
-        template: 'trial-extended',
-        data: {
-          tenantName: tenant.name,
-          trialEndDate: newTrialEnd.toLocaleDateString(),
-          additionalDays: days,
-        },
-      });
-    }
+    await sendEmail({
+      to: tenant.email || '',
+      subject: 'Your Trial Has Been Extended',
+      template: 'trial-extended',
+      data: {
+        tenantName: tenant.name,
+        trialEndDate: newTrialEnd.toLocaleDateString(),
+        additionalDays: days,
+      },
+    });
   }
 } 

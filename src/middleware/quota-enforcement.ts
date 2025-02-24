@@ -1,106 +1,111 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
-import { PLANS } from '../config/tenant-plans';
-import { Redis } from 'ioredis';
+import { PLANS, PlanId } from '../config/tenant-plans';
+import Redis from 'ioredis';
 
-// Initialize Redis client for rate limiting and quota tracking
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
-// Cache key prefixes
-const API_REQUESTS_KEY = 'api_requests';
-const APPOINTMENTS_KEY = 'appointments';
+type QuotaResource = 'locations' | 'employees' | 'services' | 'appointmentsPerMonth' | 'storageGB' | 'apiRequestsPerDay';
 
-interface QuotaCheck {
-  resource: 'locations' | 'employees' | 'services' | 'appointments' | 'storage' | 'api';
-  count?: number;
+interface QuotaOptions {
+  resource: QuotaResource;
 }
 
-export const checkQuota = ({ resource, count = 1 }: QuotaCheck) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+const QUOTA_MAPPING: Record<QuotaResource, keyof typeof PLANS['FREE']['quotas']> = {
+  locations: 'locations',
+  employees: 'employees',
+  services: 'services',
+  appointmentsPerMonth: 'appointmentsPerMonth',
+  storageGB: 'storageGB',
+  apiRequestsPerDay: 'apiRequestsPerDay',
+};
+
+export const checkQuota = (options: QuotaOptions) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.tenant) {
-        return next();
+        next();
+        return;
       }
 
-      const plan = PLANS[req.tenant.plan as keyof typeof PLANS];
+      const { resource } = options;
+      const plan = PLANS[req.tenant.plan as PlanId];
+
       if (!plan) {
-        return res.status(400).json({ error: 'Invalid plan' });
+        res.status(400).json({ error: 'Invalid plan' });
+        return;
       }
 
-      // Check API rate limits
-      if (resource === 'api') {
-        const key = `${API_REQUESTS_KEY}:${req.tenant.id}:${new Date().toISOString().split('T')[0]}`;
-        const requests = await redis.incr(key);
-        
-        // Set key expiration to 24 hours if it's new
-        if (requests === 1) {
-          await redis.expire(key, 24 * 60 * 60);
-        }
-
-        if (requests > plan.quotas.apiRequestsPerDay && plan.quotas.apiRequestsPerDay !== -1) {
-          return res.status(429).json({
-            error: 'API rate limit exceeded',
-            limit: plan.quotas.apiRequestsPerDay,
-            reset: await redis.ttl(key),
-          });
-        }
+      // Get quota limit for the resource
+      const quotaKey = QUOTA_MAPPING[resource];
+      const quota = plan.quotas[quotaKey];
+      if (!quota) {
+        next();
+        return;
       }
 
-      // Check other resource limits
-      let currentCount = 0;
+      // Check current usage
+      let currentUsage = 0;
+
       switch (resource) {
         case 'locations':
-          currentCount = await prisma.location.count({
+          currentUsage = await prisma.location.count({
             where: { tenantId: req.tenant.id },
           });
           break;
 
         case 'employees':
-          currentCount = await prisma.employee.count({
+          currentUsage = await prisma.employee.count({
             where: { tenantId: req.tenant.id },
           });
           break;
 
         case 'services':
-          currentCount = await prisma.service.count({
+          currentUsage = await prisma.service.count({
             where: { tenantId: req.tenant.id },
           });
           break;
 
-        case 'appointments':
-          // Check monthly appointment quota
+        case 'appointmentsPerMonth': {
           const startOfMonth = new Date();
           startOfMonth.setDate(1);
           startOfMonth.setHours(0, 0, 0, 0);
-          
-          currentCount = await prisma.appointment.count({
+
+          currentUsage = await prisma.appointment.count({
             where: {
               tenantId: req.tenant.id,
-              createdAt: { gte: startOfMonth },
+              createdAt: {
+                gte: startOfMonth,
+              },
             },
           });
           break;
+        }
 
-        case 'storage':
-          // Implement storage quota check here
-          // This would involve checking file sizes, etc.
+        case 'storageGB':
+          // TODO: Implement storage quota check
           break;
+
+        case 'apiRequestsPerDay': {
+          // Get API usage from Redis
+          const apiUsage = await redis.get(`api_usage:${req.tenant.id}`);
+          currentUsage = apiUsage ? parseInt(apiUsage, 10) : 0;
+          break;
+        }
       }
 
-      const quota = plan.quotas[`${resource}${resource === 'appointments' ? 'PerMonth' : ''}`];
-      if (quota !== -1 && currentCount + count > quota) {
-        return res.status(403).json({
-          error: `${resource} quota exceeded`,
+      if (currentUsage >= quota) {
+        res.status(429).json({
+          error: 'Quota exceeded',
+          resource,
           limit: quota,
-          current: currentCount,
-          requested: count,
-          available: Math.max(0, quota - currentCount),
+          current: currentUsage,
         });
+        return;
       }
 
       next();
     } catch (error) {
-      console.error(`Error checking ${resource} quota:`, error);
       next(error);
     }
   };

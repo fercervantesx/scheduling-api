@@ -96,16 +96,19 @@ router.post('/', checkJwt, async (req: Request, res: Response) => {
 
     const schedule = await prisma.schedule.create({
       data: {
-        employeeId,
-        locationId,
+        employee: {
+          connect: { id: employeeId }
+        },
+        location: {
+          connect: { id: locationId }
+        },
+        tenant: {
+          connect: { id: req.tenant?.id }
+        },
         startTime,
         endTime,
         weekday,
         blockType,
-      },
-      include: {
-        employee: true,
-        location: true,
       },
     });
     return res.status(201).json(schedule);

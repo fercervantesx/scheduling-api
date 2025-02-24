@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt } from '../middleware/auth';
 import { checkQuota } from '../middleware/quota-enforcement';
-import { PrismaClient } from '@prisma/client';
 
 const router = Router();
 
@@ -148,23 +147,9 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    // Start a transaction to handle both appointment cancellation and employee deletion
-    await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'>) => {
-      // Cancel all scheduled appointments
-      await tx.appointment.updateMany({
-        where: {
-          employeeId: id,
-          tenantId: req.tenant?.id,
-          status: 'SCHEDULED',
-        },
-        data: {
-          status: 'CANCELLED',
-          canceledBy: 'ADMIN',
-          cancelReason: 'Employee removed from system',
-        },
-      });
-
-      // Delete employee's location associations
+    // Delete employee and related records in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete employee locations
       await tx.employeeLocation.deleteMany({
         where: {
           employeeId: id,
@@ -174,7 +159,7 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
         },
       });
 
-      // Delete employee's schedules
+      // Delete schedules
       await tx.schedule.deleteMany({
         where: {
           employeeId: id,
@@ -182,7 +167,21 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
         },
       });
 
-      // Finally, delete the employee
+      // Update appointments
+      await tx.appointment.updateMany({
+        where: {
+          employeeId: id,
+          status: 'SCHEDULED',
+          tenantId: req.tenant?.id,
+        },
+        data: {
+          status: 'CANCELLED',
+          canceledBy: 'ADMIN',
+          cancelReason: 'Employee removed from system',
+        },
+      });
+
+      // Delete the employee
       await tx.employee.delete({
         where: {
           id,
@@ -191,7 +190,7 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
       });
     });
 
-    return res.json({ message: 'Employee and related data deleted successfully' });
+    return res.json({ message: 'Employee deleted successfully' });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to delete employee' });
   }

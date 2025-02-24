@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt, decodeUserInfo } from '../middleware/auth';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 
@@ -20,11 +20,11 @@ router.get('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response) 
   });
 
   try {
-    const where: any = {};
+    const where: Prisma.AppointmentWhereInput = {};
 
-    if (locationId) where.locationId = locationId;
-    if (employeeId) where.employeeId = employeeId;
-    if (status) where.status = status;
+    if (locationId) where.locationId = locationId as string;
+    if (employeeId) where.employeeId = employeeId as string;
+    if (status) where.status = status as string;
     if (startDate || endDate) {
       where.startTime = {};
       if (startDate) where.startTime.gte = new Date(startDate as string);
@@ -96,7 +96,7 @@ router.post('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response)
     const appointmentEndTime = new Date(new Date(startTime).getTime() + service.duration * 60000);
 
     // Check for conflicting appointments in a transaction
-    const appointment = await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'>) => {
+    const appointment = await prisma.$transaction(async (tx) => {
       // Check for existing appointments in the time slot
       const conflicts = await tx.appointment.findFirst({
         where: {
@@ -124,16 +124,21 @@ router.post('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response)
       }
 
       // Create the appointment if no conflicts
-      return tx.appointment.create({
+      return await tx.appointment.create({
         data: {
-          serviceId,
-          locationId,
-          employeeId,
+          service: { connect: { id: serviceId } },
+          location: { connect: { id: locationId } },
+          employee: { connect: { id: employeeId } },
           startTime: new Date(startTime),
           status: 'SCHEDULED',
           bookedBy: userEmail,
           bookedByName: userName,
           userId,
+          tenant: {
+            connect: {
+              id: req.tenant?.id
+            }
+          }
         },
         include: {
           service: true,
@@ -173,9 +178,9 @@ router.patch('/:id', [checkJwt, decodeUserInfo], async (req: Request, res: Respo
       },
     });
 
-    res.json(appointment);
+    return res.json(appointment);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update appointment' });
+    return res.status(500).json({ error: 'Failed to update appointment' });
   }
 });
 
@@ -208,9 +213,9 @@ router.delete('/:id', [checkJwt, decodeUserInfo], async (req: Request, res: Resp
       where: { id },
     });
 
-    res.json({ message: 'Appointment deleted successfully' });
+    return res.json({ message: 'Appointment deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete appointment' });
+    return res.status(500).json({ error: 'Failed to delete appointment' });
   }
 });
 

@@ -1,14 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt } from '../middleware/auth';
-import { PrismaClient } from '@prisma/client';
 
 const router = Router();
 
 // List all services
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const services = await prisma.service.findMany();
+    const services = await prisma.service.findMany({
+      where: {
+        tenantId: req.tenant?.id
+      }
+    });
     return res.json(services);
   } catch (error) {
     return res.status(500).json({ error: 'Failed to fetch services' });
@@ -24,6 +27,11 @@ router.post('/', checkJwt, async (req: Request, res: Response) => {
       data: {
         name,
         duration,
+        tenant: {
+          connect: {
+            id: req.tenant?.id
+          }
+        }
       },
     });
     return res.status(201).json(service);
@@ -38,7 +46,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 
   try {
     const service = await prisma.service.findUnique({
-      where: { id },
+      where: { 
+        id,
+        tenantId: req.tenant?.id
+      },
     });
 
     if (!service) {
@@ -56,13 +67,13 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    // Start a transaction to handle both appointment cancellation and service deletion
-    await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'>) => {
+    await prisma.$transaction(async (tx) => {
       // Cancel all scheduled appointments for this service
       await tx.appointment.updateMany({
         where: {
           serviceId: id,
           status: 'SCHEDULED',
+          tenantId: req.tenant?.id
         },
         data: {
           status: 'CANCELLED',
@@ -73,7 +84,10 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
 
       // Delete the service
       await tx.service.delete({
-        where: { id },
+        where: { 
+          id,
+          tenantId: req.tenant?.id
+        },
       });
     });
 

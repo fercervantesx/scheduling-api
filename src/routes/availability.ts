@@ -1,11 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import type { PrismaClient } from '@prisma/client';
 import { checkJwt } from '../middleware/auth';
 
 const router = Router();
-
-type AppointmentType = Awaited<ReturnType<PrismaClient['appointment']['findFirst']>>;
 
 const WEEKDAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
@@ -73,7 +70,7 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     const endOfDay = new Date(localDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Get existing appointments
+    // Get all appointments for the employee in the date range
     const appointments = await prisma.appointment.findMany({
       where: {
         employeeId: employeeId as string,
@@ -86,9 +83,13 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       include: {
         service: true,
       },
-      orderBy: {
-        startTime: 'asc',
-      },
+    });
+
+    // Calculate busy slots
+    const busySlots = appointments.map(appointment => {
+      const appointmentStart = appointment.startTime;
+      const appointmentEnd = new Date(appointmentStart.getTime() + appointment.service.duration * 60 * 1000);
+      return { start: appointmentStart, end: appointmentEnd };
     });
 
     // Parse schedule times
@@ -111,12 +112,9 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       const slotEnd = new Date(currentTime.getTime() + slotDuration);
       
       // Check if slot conflicts with any appointment
-      const hasConflict = appointments.some((appointment: NonNullable<AppointmentType>) => {
-        const appointmentStart = new Date(appointment.startTime);
-        const appointmentEnd = new Date(appointmentStart.getTime() + appointment.service.duration * 60 * 1000);
-
+      const hasConflict = busySlots.some((busySlot) => {
         return (
-          (currentTime < appointmentEnd && slotEnd > appointmentStart)
+          (currentTime < busySlot.end && slotEnd > busySlot.start)
         );
       });
 

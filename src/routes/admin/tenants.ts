@@ -1,111 +1,107 @@
-import { Router } from 'express';
-import { z } from 'zod';
+import { Router, Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
-import { validateRequest } from '../../middleware/validate-request';
-import { requireAuth } from '../../middleware/auth';
+import { checkJwt } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
+import { Prisma } from '@prisma/client';
 
 const router = Router();
 
-// Schema for creating a new tenant
-const createTenantSchema = z.object({
-  name: z.string().min(1),
-  subdomain: z.string().min(1).regex(/^[a-z0-9-]+$/),
-  customDomain: z.string().optional(),
-  plan: z.enum(['FREE', 'BASIC', 'PRO']),
-  features: z.object({
-    customBranding: z.boolean(),
-    apiAccess: z.boolean(),
-    webhooks: z.boolean(),
-    multipleLocations: z.boolean(),
-    analytics: z.boolean(),
-  }),
+// List all tenants
+router.get('/', [checkJwt, requireAdmin], async (_req: Request, res: Response) => {
+  try {
+    const tenants = await prisma.tenant.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+    return res.json(tenants);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch tenants' });
+  }
 });
 
-// Schema for updating tenant status
-const updateTenantStatusSchema = z.object({
-  status: z.enum(['ACTIVE', 'TRIAL', 'SUSPENDED']),
-});
+// Get tenant details
+router.get('/:id', [checkJwt, requireAdmin], async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-// Get all tenants
-router.get('/', requireAuth, requireAdmin, async (req, res) => {
-  const tenants = await prisma.tenant.findMany({
-    select: {
-      id: true,
-      name: true,
-      subdomain: true,
-      customDomain: true,
-      plan: true,
-      status: true,
-      features: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
-
-  res.json(tenants);
-});
-
-// Create a new tenant
-router.post(
-  '/',
-  requireAuth,
-  requireAdmin,
-  validateRequest(createTenantSchema),
-  async (req, res) => {
-    const { name, subdomain, customDomain, plan, features } = req.body;
-
-    // Check if subdomain is already taken
-    const existingTenant = await prisma.tenant.findFirst({
-      where: {
-        OR: [
-          { subdomain },
-          ...(customDomain ? [{ customDomain }] : []),
-        ],
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      include: {
+        locations: true,
+        employees: true,
+        services: true,
       },
     });
 
-    if (existingTenant) {
-      return res.status(400).json({
-        error: 'Subdomain or custom domain is already taken',
-      });
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
     }
 
+    return res.json(tenant);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to fetch tenant details' });
+  }
+});
+
+// Update tenant settings
+router.patch('/:id/settings', [checkJwt, requireAdmin], async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { settings } = req.body;
+
+  try {
+    const tenant = await prisma.tenant.update({
+      where: { id },
+      data: {
+        settings: settings as Prisma.InputJsonValue,
+      },
+    });
+    return res.json(tenant);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update tenant settings' });
+  }
+});
+
+// Create a new tenant
+router.post('/', [checkJwt, requireAdmin], async (req: Request, res: Response) => {
+  const { name, subdomain, plan } = req.body;
+
+  try {
     const tenant = await prisma.tenant.create({
       data: {
         name,
         subdomain,
-        customDomain,
         plan,
-        features,
-        status: 'TRIAL',
+        status: 'ACTIVE',
+        features: {
+          customBranding: false,
+          apiAccess: false,
+          webhooks: false,
+          multipleLocations: false,
+          analytics: false,
+        },
       },
     });
-
-    res.status(201).json(tenant);
+    return res.status(201).json(tenant);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to create tenant' });
   }
-);
+});
 
 // Update tenant status
-router.patch(
-  '/:id/status',
-  requireAuth,
-  requireAdmin,
-  validateRequest(updateTenantStatusSchema),
-  async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
+router.patch('/:id/status', [checkJwt, requireAdmin], async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
 
+  try {
     const tenant = await prisma.tenant.update({
       where: { id },
       data: { status },
     });
-
-    res.json(tenant);
+    return res.json(tenant);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update tenant status' });
   }
-);
+});
 
 export default router; 
