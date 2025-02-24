@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard (Temporary)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f7f9;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #2563eb;
+      margin-top: 0;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      margin: 15px 0;
+    }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+    .status-dot.loading {
+      background-color: #f59e0b;
+    }
+    .status-dot.error {
+      background-color: #ef4444;
+    }
+    .status-dot.success {
+      background-color: #10b981;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    pre {
+      background-color: #f1f5f9;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Scheduling API Admin Dashboard</h1>
+    <p>This is a temporary placeholder page while we resolve build issues with the React dashboard.</p>
+    
+    <h2>API Status</h2>
+    <div class="status">
+      <div id="apiStatus" class="status-dot loading"></div>
+      <span id="apiStatusText">Checking connection...</span>
+    </div>
+    
+    <button id="checkApi">Check API Connection</button>
+    
+    <h2>API Endpoints</h2>
+    <pre>
+GET /api/admin/tenants         - List all tenants
+GET /api/admin/tenants/:id     - Get tenant details
+POST /api/admin/tenants        - Create a new tenant
+PATCH /api/admin/tenants/:id/status   - Update tenant status 
+PATCH /api/admin/tenants/:id/settings - Update tenant settings</pre>
+
+    <h2>Response</h2>
+    <pre id="apiResponse">No data yet. Click "Check API Connection" to test.</pre>
+  </div>
+
+  <script>
+    // Try to auto-check status when loaded
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        document.getElementById('checkApi').click();
+      }, 500);
+    });
+  
+    document.getElementById('checkApi').addEventListener('click', async () => {
+      const statusDot = document.getElementById('apiStatus');
+      const statusText = document.getElementById('apiStatusText');
+      const responseArea = document.getElementById('apiResponse');
+      
+      statusDot.className = 'status-dot loading';
+      statusText.textContent = 'Connecting...';
+      
+      try {
+        // First try the health endpoint
+        const healthResponse = await fetch('http://localhost:3005/health');
+        const healthData = await healthResponse.json();
+        
+        // If that works, try to get tenants (with authentication)
+        try {
+          const tenantsResponse = await fetch('http://localhost:3005/api/admin/tenants', {
+            headers: {
+              'Authorization': 'Bearer TOKEN_WOULD_GO_HERE'
+            }
+          });
+          
+          if (tenantsResponse.status === 401) {
+            statusDot.className = 'status-dot success';
+            statusText.textContent = 'API is online, but you need to authenticate for tenant data';
+            responseArea.textContent = 'Health check: ' + JSON.stringify(healthData, null, 2) + 
+              '\n\nTenants endpoint returned 401 Unauthorized, which is expected when not authenticated.';
+          } else {
+            const tenantsData = await tenantsResponse.json();
+            statusDot.className = 'status-dot success';
+            statusText.textContent = 'API is fully functional!';
+            responseArea.textContent = 'Health check: ' + JSON.stringify(healthData, null, 2) + 
+              '\n\nTenants data: ' + JSON.stringify(tenantsData, null, 2);
+          }
+        } catch (tenantError) {
+          statusDot.className = 'status-dot success';
+          statusText.textContent = 'API is partially online';
+          responseArea.textContent = 'Health check: ' + JSON.stringify(healthData, null, 2) + 
+            '\n\nTenants endpoint error: ' + tenantError.toString();
+        }
+      } catch (error) {
+        statusDot.className = 'status-dot error';
+        statusText.textContent = 'Connection failed. API might be offline.';
+        responseArea.textContent = error.toString();
+      }
+    });
+  </script>
+</body>
+</html>

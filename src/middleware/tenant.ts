@@ -49,7 +49,63 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    // Find tenant by hostname
+    // DEVELOPMENT MODE: For local development with localhost, use a default tenant
+    if (process.env.NODE_ENV === 'development' && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+      // Get the first active tenant for development
+      const defaultTenant = await prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' }
+      });
+
+      if (defaultTenant) {
+        req.tenant = {
+          id: defaultTenant.id,
+          name: defaultTenant.name,
+          email: defaultTenant.email || undefined,
+          subdomain: defaultTenant.subdomain,
+          customDomain: defaultTenant.customDomain,
+          status: defaultTenant.status,
+          plan: defaultTenant.plan,
+          settings: defaultTenant.settings,
+          branding: defaultTenant.branding,
+          features: defaultTenant.features,
+          trialEndsAt: defaultTenant.trialEndsAt
+        };
+        next();
+        return;
+      } else {
+        console.log('No default tenant found for development. Creating one...');
+        
+        // Create a default tenant for development
+        const newTenant = await prisma.tenant.create({
+          data: {
+            name: 'Development Tenant',
+            subdomain: 'dev',
+            status: 'ACTIVE',
+            plan: 'PRO',
+            features: { locations: true, employees: true },
+          }
+        });
+        
+        req.tenant = {
+          id: newTenant.id,
+          name: newTenant.name,
+          email: newTenant.email || undefined,
+          subdomain: newTenant.subdomain,
+          customDomain: newTenant.customDomain,
+          status: newTenant.status,
+          plan: newTenant.plan,
+          settings: newTenant.settings || {},
+          branding: newTenant.branding || {},
+          features: newTenant.features || {},
+          trialEndsAt: newTenant.trialEndsAt
+        };
+        
+        next();
+        return;
+      }
+    }
+
+    // Normal tenant resolution for production
     const tenant = await extractTenantFromHostname(hostname);
     
     if (!tenant) {
@@ -99,7 +155,16 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
 
 // Middleware to enforce tenant isolation in database queries
 export const enforceTenantIsolation = (req: Request, res: Response, next: NextFunction): void => {
-  if (!req.tenant && !req.hostname.startsWith('admin.')) {
+  // Skip for admin dashboard or in development mode with localhost
+  if (
+    req.hostname.startsWith('admin.') || 
+    (process.env.NODE_ENV === 'development' && (req.hostname === 'localhost' || req.hostname === '127.0.0.1'))
+  ) {
+    next();
+    return;
+  }
+
+  if (!req.tenant) {
     res.status(400).json({ error: 'Tenant context required' });
     return;
   }
@@ -109,6 +174,12 @@ export const enforceTenantIsolation = (req: Request, res: Response, next: NextFu
 // Middleware to check feature access
 export const checkFeatureAccess = (featureName: string) => {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // In development mode with localhost, allow all features
+    if (process.env.NODE_ENV === 'development' && (req.hostname === 'localhost' || req.hostname === '127.0.0.1')) {
+      next();
+      return;
+    }
+    
     if (!req.tenant) {
       next();
       return;

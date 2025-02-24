@@ -49,12 +49,41 @@ export default function Tenants() {
   const { data: tenants = [], isLoading } = useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
-      const token = await getAccessTokenSilently();
-      const response = await api.get('/admin/tenants', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data;
+      try {
+        const token = await getAccessTokenSilently();
+        console.log('Got token for /admin/tenants request');
+        const response = await api.get('/admin/tenants', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching tenants:', error);
+        throw error;
+      }
     },
+  });
+  
+  // Using underscore prefix for unused variables to avoid TypeScript warnings
+  const { /* data: tenantDetails, */ isLoading: _isDetailLoading } = useQuery({
+    queryKey: ['tenant-details'],
+    queryFn: async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        // Get the first tenant for detailed stats (in a real app, this would be selected by the user)
+        if (tenants && tenants.length > 0) {
+          console.log('Fetching details for tenant:', tenants[0].id);
+          const response = await api.get(`/admin/tenants/${tenants[0].id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          return response.data;
+        }
+        return null;
+      } catch (error) {
+        console.error('Error fetching tenant details:', error);
+        return null;
+      }
+    },
+    enabled: tenants && tenants.length > 0,
   });
 
   const createTenant = useMutation({
@@ -128,80 +157,150 @@ export default function Tenants() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-gray-900">Tenants</h2>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Add Tenant
-        </button>
+    <div className="space-y-6">
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" />
+                </svg>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Tenants</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">{tenants.length}</div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Active Tenants</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {tenants.filter((t: any) => t.status === 'ACTIVE').length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-yellow-500 rounded-md p-3">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Trial Tenants</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {tenants.filter((t: any) => t.status === 'TRIAL').length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="border-t border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subdomain</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {tenants.map((tenant: any) => (
-              <tr key={tenant.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tenant.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <a
-                    href={`https://${tenant.subdomain}.${window.location.host}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    {tenant.subdomain}
-                  </a>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                    {tenant.plan}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                    ${tenant.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
-                      tenant.status === 'TRIAL' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'}`}
-                  >
-                    {tenant.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex space-x-2">
-                    {tenant.status !== 'ACTIVE' && (
-                      <button
-                        onClick={() => updateTenantStatus.mutate({ id: tenant.id, status: 'ACTIVE' })}
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        Activate
-                      </button>
-                    )}
-                    {tenant.status !== 'SUSPENDED' && (
-                      <button
-                        onClick={() => updateTenantStatus.mutate({ id: tenant.id, status: 'SUSPENDED' })}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Suspend
-                      </button>
-                    )}
-                  </div>
-                </td>
+      {/* Tenant List */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-900">Tenants</h2>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Add Tenant
+          </button>
+        </div>
+
+        <div className="border-t border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subdomain</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {tenants.map((tenant: any) => (
+                <tr key={tenant.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tenant.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <a
+                      href={`https://${tenant.subdomain}.${window.location.host}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-900"
+                    >
+                      {tenant.subdomain}
+                    </a>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                      {tenant.plan}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                      ${tenant.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                        tenant.status === 'TRIAL' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'}`}
+                    >
+                      {tenant.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex space-x-2">
+                      {tenant.status !== 'ACTIVE' && (
+                        <button
+                          onClick={() => updateTenantStatus.mutate({ id: tenant.id, status: 'ACTIVE' })}
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          Activate
+                        </button>
+                      )}
+                      {tenant.status !== 'SUSPENDED' && (
+                        <button
+                          onClick={() => updateTenantStatus.mutate({ id: tenant.id, status: 'SUSPENDED' })}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Suspend
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal */}

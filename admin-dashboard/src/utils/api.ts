@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Default to 'http://localhost:3005/api' in development
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
+
+// For debugging API URL issues
+console.log('API URL:', API_URL);
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,6 +20,7 @@ api.interceptors.request.use(
     const authHeader = config.headers.Authorization;
     console.log('API Request:', {
       url: config.url,
+      fullUrl: `${config.baseURL}${config.url}`,
       method: config.method,
       hasAuthHeader: !!authHeader,
       authHeaderType: authHeader ? typeof authHeader : 'none',
@@ -33,4 +40,26 @@ api.interceptors.request.use(
   }
 );
 
-export default api; 
+// Add response interceptor for logging
+api.interceptors.response.use(
+  (response) => {
+    console.log('API Response:', {
+      status: response.status,
+      url: response.config.url,
+      method: response.config.method,
+    });
+    return response;
+  },
+  (error) => {
+    console.error('API Response Error:', {
+      message: error.message,
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    return Promise.reject(error);
+  }
+);
+
+export default api;

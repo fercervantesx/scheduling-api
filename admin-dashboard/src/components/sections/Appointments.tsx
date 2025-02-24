@@ -79,7 +79,7 @@ export default function Appointments() {
     enabled: !!formData.locationId,
   });
 
-  const { data: availableSlots = [], isLoading: isLoadingSlots } = useQuery({
+  const { data: availableSlots = [], isLoading: _isLoadingSlots } = useQuery({
     queryKey: ['availability', formData],
     queryFn: async () => {
       if (!formData.locationId || !formData.employeeId || !formData.serviceId || !formData.date) {

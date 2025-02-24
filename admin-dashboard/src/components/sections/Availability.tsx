@@ -109,7 +109,7 @@ export default function Availability() {
         },
       });
     },
-    onError: (error) => {
+    onError: (_error) => {
       toast.error('Failed to book appointment', {
         duration: 4000,
         style: {

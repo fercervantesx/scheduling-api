@@ -16,6 +16,12 @@ declare global {
 }
 
 export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // In development, skip admin check
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Development mode: skipping admin check');
+    return next();
+  }
+  
   try {
     if (!req.auth?.payload.sub) {
       res.status(401).json({

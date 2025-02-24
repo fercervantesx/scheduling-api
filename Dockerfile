@@ -3,6 +3,9 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL and other dependencies
+RUN apk add --no-cache openssl openssl-dev
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -14,6 +17,7 @@ RUN npm ci
 COPY . .
 
 # Generate Prisma client
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 RUN npx prisma generate
 
 # Build TypeScript code
@@ -24,6 +28,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
 # Copy package files and install production dependencies
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -32,6 +39,7 @@ RUN npm ci --only=production
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Environment variables
 ENV NODE_ENV=production

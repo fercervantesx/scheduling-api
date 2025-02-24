@@ -1,46 +1,63 @@
 # Scheduling Admin Dashboard
 
-A modern React-based admin dashboard for managing appointments, schedules, and business operations.
+A modern React-based admin dashboard for managing multi-tenant appointments, schedules, and business operations.
 
 ## Features
+
+- 🏢 Tenant Management
+  - Manage multiple tenants
+  - Tenant status control
+  - Plan management
+  - Feature flag configuration
+  - Usage monitoring
 
 - 🔐 Secure Authentication
   - Auth0 integration
   - JWT token management
   - Role-based access control
+
 - 📊 Dashboard Overview
   - Clean, modern interface
   - Responsive design
-  - Real-time updates
+  - Real-time statistics
+  - System health monitoring
+
 - 📍 Location Management
   - Create and manage locations
   - View location details
   - Track location-specific data
+
 - 👥 Employee Management
   - Add and manage employees
   - Assign to multiple locations
   - View employee schedules
+
 - 🔧 Service Management
   - Configure service offerings
   - Set service durations
   - Track service usage
+
 - 📅 Schedule Management
   - Set working hours
   - Configure breaks and time off
   - Weekly schedule templates
+
 - 🎯 Appointment Management
   - View all appointments
   - Filter by date, location, employee
   - Update appointment status
+
 - ⏰ Availability Checking
   - Real-time slot calculation
   - Multi-criteria filtering
   - Timezone support
+
 - 🎨 Modern UI/UX
   - Tailwind CSS styling
   - Responsive design
   - Toast notifications
   - Modal dialogs
+
 - 🔄 State Management
   - React Query for server state
   - Optimistic updates
@@ -66,6 +83,8 @@ A modern React-based admin dashboard for managing appointments, schedules, and b
 
 ## Setup
 
+### Standard Setup
+
 1. Install dependencies:
 ```bash
 npm install
@@ -77,7 +96,7 @@ Copy `.env.example` to `.env` and fill in your Auth0 credentials:
 VITE_AUTH0_DOMAIN=your-auth0-domain.auth0.com
 VITE_AUTH0_CLIENT_ID=your-auth0-client-id
 VITE_AUTH0_AUDIENCE=your-auth0-audience
-VITE_API_URL=http://localhost:3000/api
+VITE_API_URL=http://localhost:3005/api
 ```
 
 3. Start the development server:
@@ -86,6 +105,17 @@ npm run dev
 ```
 
 The dashboard will be available at `http://localhost:5173`.
+
+### Docker Setup
+
+1. Using Docker Compose (from the root directory):
+```bash
+docker-compose up admin-dashboard
+```
+
+This will build and start the admin dashboard container, accessible at `http://localhost:3001`.
+
+Note: There are currently some issues with the Rollup build in Docker with ARM64 architecture. If you encounter these issues, you can use the static HTML fallback provided in the container.
 
 ## Auth0 Configuration
 
@@ -115,7 +145,8 @@ src/
   │   │   ├── Employees.tsx
   │   │   ├── Locations.tsx
   │   │   ├── Schedules.tsx
-  │   │   └── Services.tsx
+  │   │   ├── Services.tsx
+  │   │   └── Tenants.tsx  # Tenant management
   │   └── ...             # Other components
   ├── utils/              # Utility functions
   │   └── api.ts         # API client configuration
@@ -124,6 +155,14 @@ src/
 ```
 
 ## Features in Detail
+
+### Tenant Management
+- View all tenants with status and plan information
+- Create new tenants with subdomain and plan selection
+- Set tenant status (Active, Suspended, Trial)
+- Configure tenant-specific features
+- Manage tenant settings and branding options
+- View tenant metrics and usage statistics
 
 ### Locations
 - View all locations in a table format

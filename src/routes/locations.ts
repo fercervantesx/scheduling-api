@@ -27,16 +27,54 @@ router.post('/', [
   const { name, address } = req.body;
 
   try {
-    const location = await prisma.location.create({
-      data: {
-        name,
-        address,
-        tenantId: req.tenant!.id,
-      },
-    });
-    return res.status(201).json(location);
+    // First, check if req.tenant exists in development mode
+    if (process.env.NODE_ENV === 'development' && !req.tenant) {
+      console.log('Creating location without tenant in development mode');
+      // Create a default tenant if it doesn't exist
+      const defaultTenant = await prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' }
+      });
+      
+      let tenantId;
+      
+      if (defaultTenant) {
+        tenantId = defaultTenant.id;
+      } else {
+        const newTenant = await prisma.tenant.create({
+          data: {
+            name: 'Development Tenant',
+            subdomain: 'dev',
+            status: 'ACTIVE',
+            plan: 'PRO',
+            features: { locations: true, employees: true },
+          }
+        });
+        tenantId = newTenant.id;
+      }
+      
+      const location = await prisma.location.create({
+        data: {
+          name,
+          address,
+          tenantId: tenantId,
+        },
+      });
+      return res.status(201).json(location);
+    } else {
+      // Normal flow with tenant
+      console.log('Creating location with tenant:', req.tenant?.id);
+      const location = await prisma.location.create({
+        data: {
+          name,
+          address,
+          tenantId: req.tenant!.id,
+        },
+      });
+      return res.status(201).json(location);
+    }
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to create location' });
+    console.error('Error creating location:', error);
+    return res.status(500).json({ error: 'Failed to create location', details: process.env.NODE_ENV === 'development' ? String(error) : undefined });
   }
 });
 

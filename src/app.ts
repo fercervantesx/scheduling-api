@@ -11,7 +11,14 @@ app.use(express.json());
 app.use(resolveTenant);
 app.use(enforceTenantIsolation);
 
-// Admin routes
+// Health check endpoint
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Admin routes - use standalone configuration for these routes
 app.use('/api/admin/tenants', tenantsRouter);
+
+// Generic error handlers will be added in index.ts
 
 export default app; 

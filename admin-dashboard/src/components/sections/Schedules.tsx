@@ -38,7 +38,7 @@ export default function Schedules() {
     blockType: 'WORKING_HOURS',
   });
 
-  const { data: schedules = [], isLoading: isLoadingSchedules, error: schedulesError } = useQuery({
+  const { data: schedules = [], isLoading: isLoadingSchedules, error: _schedulesError } = useQuery({
     queryKey: ['schedules'],
     queryFn: async () => {
       try {

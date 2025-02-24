@@ -1,9 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { PLANS, PlanId } from '../config/tenant-plans';
-import Redis from 'ioredis';
-
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redis } from '../lib/redis';
 
 type QuotaResource = 'locations' | 'employees' | 'services' | 'appointmentsPerMonth' | 'storageGB' | 'apiRequestsPerDay';
 
@@ -23,6 +21,12 @@ const QUOTA_MAPPING: Record<QuotaResource, keyof typeof PLANS['FREE']['quotas']>
 export const checkQuota = (options: QuotaOptions) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // In development mode with localhost, skip quota enforcement
+      if (process.env.NODE_ENV === 'development' && (req.hostname === 'localhost' || req.hostname === '127.0.0.1')) {
+        next();
+        return;
+      }
+      
       if (!req.tenant) {
         next();
         return;
