@@ -1,0 +1,88 @@
+// This is your Prisma schema file
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Location {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  address     String
+  employees   EmployeeLocation[]
+  schedules   Schedule[]
+  appointments Appointment[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Service {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  duration    Int         // Duration in minutes
+  appointments Appointment[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Employee {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  locations   EmployeeLocation[]
+  schedules   Schedule[]
+  appointments Appointment[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model EmployeeLocation {
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  employeeId  String      @db.Uuid
+  location    Location    @relation(fields: [locationId], references: [id])
+  locationId  String      @db.Uuid
+  createdAt   DateTime    @default(now())
+
+  @@id([employeeId, locationId])
+}
+
+model Schedule {
+  id          String       @id @default(uuid()) @db.Uuid
+  employee    Employee     @relation(fields: [employeeId], references: [id])
+  employeeId  String       @db.Uuid
+  location    Location     @relation(fields: [locationId], references: [id])
+  locationId  String       @db.Uuid
+  startTime   String      // Format: "HH:mm"
+  endTime     String      // Format: "HH:mm"
+  weekday     String      // e.g., 'MONDAY', 'TUESDAY', etc.
+  blockType   String      // e.g., 'WORKING_HOURS', 'BREAK', 'VACATION', etc.
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([employeeId, locationId, weekday])
+}
+
+model Appointment {
+  id            String     @id @default(uuid()) @db.Uuid
+  service       Service    @relation(fields: [serviceId], references: [id])
+  serviceId     String     @db.Uuid
+  location      Location   @relation(fields: [locationId], references: [id])
+  locationId    String     @db.Uuid
+  employee      Employee   @relation(fields: [employeeId], references: [id])
+  employeeId    String     @db.Uuid
+  startTime     DateTime
+  status        String     // e.g., 'SCHEDULED', 'COMPLETED', 'CANCELLED', etc.
+  canceledBy    String?    // e.g., 'CLIENT', 'EMPLOYEE', 'ADMIN', etc.
+  cancelReason  String?
+  bookedBy      String     // User email from JWT token
+  bookedByName  String     // User name from JWT token
+  userId        String     // Auth0 user ID
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([employeeId, startTime, status])
+  @@index([locationId, startTime, status])
+  @@index([userId, startTime])
+} 
