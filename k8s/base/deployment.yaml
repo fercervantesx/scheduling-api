@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduling-api
+  namespace: scheduling-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: scheduling-api
+  template:
+    metadata:
+      labels:
+        app: scheduling-api
+    spec:
+      containers:
+      - name: api
+        image: scheduling-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: redis-url
+        - name: AUTH0_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-domain
+        - name: AUTH0_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-audience
+        - name: AUTH0_MANAGEMENT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-management-client-id
+        - name: AUTH0_MANAGEMENT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-management-client-secret
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      - name: admin-dashboard
+        image: scheduling-admin:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        env:
+        - name: VITE_AUTH0_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-domain
+        - name: VITE_AUTH0_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-client-id
+        - name: VITE_AUTH0_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: scheduling-api-secrets
+              key: auth0-audience
+        - name: VITE_API_URL
+          value: "https://api.scheduling.example.com"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi" 

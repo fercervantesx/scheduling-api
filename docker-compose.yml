@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      target: builder
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/scheduling_db?schema=public
+      - REDIS_URL=redis://redis:6379
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - AUTH0_MANAGEMENT_CLIENT_ID=${AUTH0_MANAGEMENT_CLIENT_ID}
+      - AUTH0_MANAGEMENT_CLIENT_SECRET=${AUTH0_MANAGEMENT_CLIENT_SECRET}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - db
+      - redis
+    command: npm run dev
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=scheduling_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  admin:
+    build:
+      context: ./admin-dashboard
+      target: development
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - VITE_AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - VITE_AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - VITE_API_URL=http://localhost:3000/api
+    volumes:
+      - ./admin-dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  redis_data: 

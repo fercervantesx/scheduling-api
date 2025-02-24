@@ -1,13 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt } from '../middleware/auth';
+import { checkQuota } from '../middleware/quota-enforcement';
 
 const router = Router();
 
 // List all locations
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const locations = await prisma.location.findMany();
+    const locations = await prisma.location.findMany({
+      where: {
+        tenantId: req.tenant?.id,
+      },
+    });
     return res.json(locations);
   } catch (error) {
     return res.status(500).json({ error: 'Failed to fetch locations' });
@@ -15,7 +20,10 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 // Create a new location (requires authentication)
-router.post('/', checkJwt, async (req: Request, res: Response) => {
+router.post('/', [
+  checkJwt,
+  checkQuota({ resource: 'locations' }),
+], async (req: Request, res: Response) => {
   const { name, address } = req.body;
 
   try {
@@ -23,6 +31,7 @@ router.post('/', checkJwt, async (req: Request, res: Response) => {
       data: {
         name,
         address,
+        tenantId: req.tenant!.id,
       },
     });
     return res.status(201).json(location);
@@ -36,8 +45,11 @@ router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const location = await prisma.location.findUnique({
-      where: { id },
+    const location = await prisma.location.findFirst({
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
       include: {
         employees: {
           include: {

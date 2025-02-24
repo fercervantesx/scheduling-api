@@ -1,14 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt } from '../middleware/auth';
+import { checkQuota } from '../middleware/quota-enforcement';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
 
 // List all employees
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const employees = await prisma.employee.findMany({
+      where: {
+        tenantId: req.tenant?.id,
+      },
       include: {
         locations: {
           include: {
@@ -24,17 +28,24 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 // Create a new employee
-router.post('/', checkJwt, async (req: Request, res: Response) => {
+router.post('/', [
+  checkJwt,
+  checkQuota({ resource: 'employees' }),
+], async (req: Request, res: Response) => {
   const { name, locationIds } = req.body;
 
   try {
     const employee = await prisma.employee.create({
       data: {
         name,
+        tenantId: req.tenant!.id,
         locations: {
           create: locationIds.map((locationId: string) => ({
             location: {
-              connect: { id: locationId },
+              connect: { 
+                id: locationId,
+                tenantId: req.tenant!.id,
+              },
             },
           })),
         },
@@ -58,8 +69,11 @@ router.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const employee = await prisma.employee.findUnique({
-      where: { id },
+    const employee = await prisma.employee.findFirst({
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
       include: {
         locations: {
           include: {
@@ -88,17 +102,28 @@ router.patch('/:id/locations', checkJwt, async (req: Request, res: Response) => 
   try {
     // First, delete all existing location associations
     await prisma.employeeLocation.deleteMany({
-      where: { employeeId: id },
+      where: {
+        employeeId: id,
+        employee: {
+          tenantId: req.tenant?.id,
+        },
+      },
     });
 
     // Then create new associations
     const employee = await prisma.employee.update({
-      where: { id },
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
       data: {
         locations: {
           create: locationIds.map((locationId: string) => ({
             location: {
-              connect: { id: locationId },
+              connect: {
+                id: locationId,
+                tenantId: req.tenant!.id,
+              },
             },
           })),
         },
@@ -129,6 +154,7 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
       await tx.appointment.updateMany({
         where: {
           employeeId: id,
+          tenantId: req.tenant?.id,
           status: 'SCHEDULED',
         },
         data: {
@@ -140,17 +166,28 @@ router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
 
       // Delete employee's location associations
       await tx.employeeLocation.deleteMany({
-        where: { employeeId: id },
+        where: {
+          employeeId: id,
+          employee: {
+            tenantId: req.tenant?.id,
+          },
+        },
       });
 
       // Delete employee's schedules
       await tx.schedule.deleteMany({
-        where: { employeeId: id },
+        where: {
+          employeeId: id,
+          tenantId: req.tenant?.id,
+        },
       });
 
       // Finally, delete the employee
       await tx.employee.delete({
-        where: { id },
+        where: {
+          id,
+          tenantId: req.tenant?.id,
+        },
       });
     });
 
