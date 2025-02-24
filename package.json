@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "description": "A Node.js + TypeScript + Express API for managing appointments and schedules",
   "main": "dist/index.js",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed": "prisma db seed",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -25,6 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.10.0",
+    "auth0": "^4.18.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
@@ -32,7 +36,8 @@
     "express-jwt": "^8.4.1",
     "jwks-rsa": "^3.1.0",
     "jwt-decode": "^4.0.0",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
