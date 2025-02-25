@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import tenantsRouter from './routes/admin/tenants';
 import { resolveTenant, enforceTenantIsolation } from './middleware/tenant';
+import { PLANS } from './config/tenant-plans';
 
 const app = express();
 
@@ -55,6 +56,39 @@ app.get('/debug-tenant', (req, res) => {
       'x-tenant-id': req.headers['x-tenant-id'],
       host: req.headers['host']
     }
+  });
+});
+
+// Tenant plan endpoint
+app.get('/api/tenant/plan', (req, res) => {
+  if (!req.tenant) {
+    return res.status(400).json({ error: 'Tenant context required' });
+  }
+
+  // Get plan configuration details
+  const planConfig = PLANS[req.tenant.plan as keyof typeof PLANS];
+  if (!planConfig) {
+    return res.status(404).json({ error: 'Plan not found' });
+  }
+
+  // Create feature list from plan configuration
+  const features = Object.entries(planConfig.features)
+    .filter(([_, enabled]) => enabled)
+    .map(([feature]) => feature);
+
+  // Add quota-based features
+  if (planConfig.quotas.locations > 1 || planConfig.quotas.locations === -1) {
+    features.push('Multiple Locations');
+  }
+  if (planConfig.quotas.employees > 5 || planConfig.quotas.employees === -1) {
+    features.push('Extended Team Management');
+  }
+
+  return res.json({
+    plan: req.tenant.plan,
+    status: req.tenant.status,
+    trialEndsAt: req.tenant.trialEndsAt,
+    features
   });
 });
 

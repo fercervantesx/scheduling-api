@@ -62,11 +62,11 @@ export default function Availability() {
     },
   });
 
-  const { data: availableSlots = [], isLoading: isLoadingSlots } = useQuery<TimeSlot[]>({
+  const { data: availabilityData = { slots: [] }, isLoading: isLoadingSlots } = useQuery({
     queryKey: ['availability', formData],
     queryFn: async () => {
       if (!formData.locationId || !formData.employeeId || !formData.serviceId || !formData.date) {
-        return [];
+        return { slots: [] };
       }
 
       const token = await getAccessTokenSilently();
@@ -83,6 +83,9 @@ export default function Availability() {
     },
     enabled: !!(formData.locationId && formData.employeeId && formData.serviceId && formData.date),
   });
+  
+  // Extract slots from the response
+  const availableSlots = availabilityData.slots || [];
 
   const createAppointment = useMutation({
     mutationFn: async ({ startTime }: { startTime: string }) => {

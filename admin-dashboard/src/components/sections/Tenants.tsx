@@ -263,9 +263,50 @@ export default function Tenants() {
                     </a>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                      {tenant.plan}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {tenant.plan}
+                      </span>
+                      <div className="relative inline-block text-left">
+                        <button 
+                          type="button"
+                          className="text-blue-600 hover:text-blue-900 text-xs"
+                          onClick={() => {
+                            const selectEl = document.getElementById(`plan-select-${tenant.id}`);
+                            if (selectEl) selectEl.classList.toggle('hidden');
+                          }}
+                        >
+                          Change
+                        </button>
+                        <div id={`plan-select-${tenant.id}`} className="hidden origin-top-right absolute right-0 mt-2 w-32 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                          <div className="py-1" role="menu">
+                            {PLANS.map(plan => (
+                              <button
+                                key={plan.id}
+                                className={`block w-full text-left px-4 py-2 text-sm ${tenant.plan === plan.id ? 'bg-gray-100 text-gray-900' : 'text-gray-700'} hover:bg-gray-100`}
+                                onClick={async () => {
+                                  try {
+                                    const token = await getAccessTokenSilently();
+                                    await api.patch(`/admin/tenants/${tenant.id}/plan`, 
+                                      { plan: plan.id },
+                                      { headers: { Authorization: `Bearer ${token}` } }
+                                    );
+                                    queryClient.invalidateQueries({ queryKey: ['tenants'] });
+                                    document.getElementById(`plan-select-${tenant.id}`)?.classList.add('hidden');
+                                    toast.success(`Plan updated to ${plan.name}`);
+                                  } catch (error) {
+                                    toast.error('Failed to update plan');
+                                    console.error(error);
+                                  }
+                                }}
+                              >
+                                {plan.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full

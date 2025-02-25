@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { checkJwt } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { Prisma } from '@prisma/client';
+import { PLANS } from '../../config/tenant-plans';
 
 const router = Router();
 
@@ -101,6 +102,35 @@ router.patch('/:id/status', [checkJwt, requireAdmin], async (req: Request, res: 
     return res.json(tenant);
   } catch (error) {
     return res.status(500).json({ error: 'Failed to update tenant status' });
+  }
+});
+
+// Update tenant plan
+router.patch('/:id/plan', [checkJwt, requireAdmin], async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { plan } = req.body;
+
+  if (!plan || !PLANS[plan as keyof typeof PLANS]) {
+    return res.status(400).json({ error: 'Invalid plan specified' });
+  }
+
+  try {
+    // Get plan features based on plan level
+    const planConfig = PLANS[plan as keyof typeof PLANS];
+    
+    // Update tenant with new plan and default features for that plan
+    const tenant = await prisma.tenant.update({
+      where: { id },
+      data: { 
+        plan,
+        features: planConfig.features
+      },
+    });
+    
+    return res.json(tenant);
+  } catch (error) {
+    console.error('Failed to update tenant plan:', error);
+    return res.status(500).json({ error: 'Failed to update tenant plan' });
   }
 });
 
