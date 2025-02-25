@@ -54,6 +54,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    command: >
+      sh -c "
+        ./setup-db.sh &&
+        node dist/index.js
+      "
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma

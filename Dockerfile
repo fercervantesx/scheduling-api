@@ -21,7 +21,10 @@ ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 RUN npx prisma generate
 
 # Build TypeScript code
-RUN npm run build
+RUN npm run build 
+
+# Compile seed script
+RUN npx tsc prisma/seed.ts --outDir dist/prisma
 
 # Production stage
 FROM node:18-alpine
@@ -36,10 +39,21 @@ COPY package*.json ./
 COPY prisma ./prisma/
 RUN npm ci --only=production
 
+# Install ts-node for seeding
+RUN npm install -g typescript ts-node
+
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy TypeScript files for seeding
+COPY src/ ./src/
+COPY tsconfig.json ./
+
+# Copy database setup script
+COPY setup-db.sh ./
+RUN chmod +x setup-db.sh
 
 # Environment variables
 ENV NODE_ENV=production

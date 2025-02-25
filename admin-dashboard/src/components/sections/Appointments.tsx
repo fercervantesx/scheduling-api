@@ -404,6 +404,7 @@ export default function Appointments() {
                             hour: '2-digit',
                             minute: '2-digit',
                             hour12: true,
+                            timeZone: 'UTC'
                           })}
                         </button>
                       ))}

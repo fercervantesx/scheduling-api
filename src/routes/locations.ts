@@ -156,42 +156,35 @@ router.delete('/:id', [
         id,
         tenantId: req.tenant?.id,
       },
+      include: {
+        employees: true,
+        schedules: true,
+        appointments: true,
+      },
     });
 
     if (!existingLocation) {
       return res.status(404).json({ error: 'Location not found' });
     }
 
-    // First check if there are any dependencies
-    const employeeLocations = await prisma.employeeLocation.findMany({
-      where: { locationId: id },
-    });
-    
-    const schedules = await prisma.schedule.findMany({
-      where: { locationId: id },
-    });
-    
-    const appointments = await prisma.appointment.findMany({
-      where: { locationId: id },
-    });
+    // Get counts before deletion for reporting
+    const relatedCounts = {
+      employeeCount: existingLocation.employees.length,
+      scheduleCount: existingLocation.schedules.length,
+      appointmentCount: existingLocation.appointments.length,
+    };
 
-    if (employeeLocations.length > 0 || schedules.length > 0 || appointments.length > 0) {
-      return res.status(409).json({ 
-        error: 'Cannot delete location with existing relationships',
-        details: {
-          employeeCount: employeeLocations.length,
-          scheduleCount: schedules.length,
-          appointmentCount: appointments.length
-        }
-      });
-    }
-
-    // Delete the location
+    // With cascading deletes in place, we can directly delete the location
+    // and all related records will be automatically deleted
     await prisma.location.delete({
       where: { id },
     });
 
-    return res.json({ success: true, message: 'Location deleted successfully' });
+    return res.json({ 
+      success: true, 
+      message: 'Location deleted successfully',
+      cascaded: relatedCounts
+    });
   } catch (error) {
     console.error('Error deleting location:', error);
     return res.status(500).json({ error: 'Failed to delete location', details: process.env.NODE_ENV === 'development' ? String(error) : undefined });
