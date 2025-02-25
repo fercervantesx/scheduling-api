@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import type { Schedule } from '../tests/types/models';
 
 const prisma = new PrismaClient();
 
@@ -8,6 +7,8 @@ async function main() {
   const tenant = await prisma.tenant.create({
     data: {
       name: 'Demo Salon',
+      subdomain: 'demo',
+      features: {}, // Empty JSON object
     },
   });
 
@@ -100,63 +101,54 @@ async function main() {
   console.log('Created employees:', employees);
 
   // Create schedules for the next 7 days
-  const startDate = new Date();
-  const schedules: Schedule[] = [];
+  const schedules = [];
+  const weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
-  for (let i = 0; i < 7; i++) {
-    const currentDate = new Date(startDate);
-    currentDate.setDate(startDate.getDate() + i);
-    
+  // Create standard weekly schedule template instead of date-specific entries
+  for (const weekday of weekdays) {
     // Create schedule for John Smith
-    const johnStartTime = new Date(currentDate);
-    johnStartTime.setHours(9, 0, 0, 0);
-    const johnEndTime = new Date(currentDate);
-    johnEndTime.setHours(17, 0, 0, 0);
-
     const johnSchedule = await prisma.schedule.create({
       data: {
         employeeId: employees[0].id,
         locationId: location.id,
         tenantId: tenant.id,
-        startTime: johnStartTime.toISOString(),
-        endTime: johnEndTime.toISOString(),
+        startTime: "09:00",
+        endTime: "17:00",
         blockType: 'WORKING_HOURS',
-        weekday: currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+        weekday: weekday,
       },
     });
 
-    schedules.push({
-      ...johnSchedule,
-      startTime: new Date(johnSchedule.startTime),
-      endTime: new Date(johnSchedule.endTime),
-    });
+    schedules.push(johnSchedule);
 
     // Create schedule for Sarah Johnson
-    const sarahStartTime = new Date(currentDate);
-    sarahStartTime.setHours(10, 0, 0, 0);
-    const sarahEndTime = new Date(currentDate);
-    sarahEndTime.setHours(18, 0, 0, 0);
-
     const sarahSchedule = await prisma.schedule.create({
       data: {
         employeeId: employees[1].id,
         locationId: location.id,
         tenantId: tenant.id,
-        startTime: sarahStartTime.toISOString(),
-        endTime: sarahEndTime.toISOString(),
+        startTime: "10:00",
+        endTime: "18:00",
         blockType: 'WORKING_HOURS',
-        weekday: currentDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase(),
+        weekday: weekday,
       },
     });
 
-    schedules.push({
-      ...sarahSchedule,
-      startTime: new Date(sarahSchedule.startTime),
-      endTime: new Date(sarahSchedule.endTime),
-    });
+    schedules.push(sarahSchedule);
   }
 
   console.log('Created schedules:', schedules);
+
+  // Create a second tenant
+  const tenant2 = await prisma.tenant.create({
+    data: {
+      name: 'Itinari Travel',
+      subdomain: 'itinaritravel',
+      features: {}, // Empty JSON object
+    },
+  });
+
+  console.log('Created second tenant:', tenant2);
 }
 
 main()
@@ -166,4 +158,4 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
-  }); 
+  });

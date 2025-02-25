@@ -107,4 +107,95 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Update a location (requires authentication)
+router.put('/:id', [
+  checkJwt,
+], async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, address } = req.body;
+
+  try {
+    // Check if the location exists and belongs to the tenant
+    const existingLocation = await prisma.location.findFirst({
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
+    });
+
+    if (!existingLocation) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+
+    // Update the location
+    const location = await prisma.location.update({
+      where: { id },
+      data: {
+        name,
+        address,
+      },
+    });
+
+    return res.json(location);
+  } catch (error) {
+    console.error('Error updating location:', error);
+    return res.status(500).json({ error: 'Failed to update location', details: process.env.NODE_ENV === 'development' ? String(error) : undefined });
+  }
+});
+
+// Delete a location (requires authentication)
+router.delete('/:id', [
+  checkJwt,
+], async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // Check if the location exists and belongs to the tenant
+    const existingLocation = await prisma.location.findFirst({
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
+    });
+
+    if (!existingLocation) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+
+    // First check if there are any dependencies
+    const employeeLocations = await prisma.employeeLocation.findMany({
+      where: { locationId: id },
+    });
+    
+    const schedules = await prisma.schedule.findMany({
+      where: { locationId: id },
+    });
+    
+    const appointments = await prisma.appointment.findMany({
+      where: { locationId: id },
+    });
+
+    if (employeeLocations.length > 0 || schedules.length > 0 || appointments.length > 0) {
+      return res.status(409).json({ 
+        error: 'Cannot delete location with existing relationships',
+        details: {
+          employeeCount: employeeLocations.length,
+          scheduleCount: schedules.length,
+          appointmentCount: appointments.length
+        }
+      });
+    }
+
+    // Delete the location
+    await prisma.location.delete({
+      where: { id },
+    });
+
+    return res.json({ success: true, message: 'Location deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting location:', error);
+    return res.status(500).json({ error: 'Failed to delete location', details: process.env.NODE_ENV === 'development' ? String(error) : undefined });
+  }
+});
+
 export default router; 

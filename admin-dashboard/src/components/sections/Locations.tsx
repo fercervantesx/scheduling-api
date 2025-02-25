@@ -17,10 +17,17 @@ interface LocationFormData {
   address: string;
 }
 
+enum ModalMode {
+  CREATE,
+  EDIT
+}
+
 export default function Locations() {
   const { getAccessTokenSilently } = useAuth0();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>(ModalMode.CREATE);
+  const [currentLocationId, setCurrentLocationId] = useState<string | null>(null);
   const [formData, setFormData] = useState<LocationFormData>({
     name: '',
     address: '',
@@ -56,9 +63,92 @@ export default function Locations() {
     },
   });
 
+  const updateLocation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: LocationFormData }) => {
+      const token = await getAccessTokenSilently();
+      const response = await api.put(`/locations/${id}`, data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      setIsModalOpen(false);
+      setCurrentLocationId(null);
+      setFormData({ name: '', address: '' });
+      toast.success('Location updated successfully');
+    },
+    onError: () => {
+      toast.error('Failed to update location');
+    },
+  });
+
+  const deleteLocation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = await getAccessTokenSilently();
+      const response = await api.delete(`/locations/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      toast.success('Location deleted successfully');
+    },
+    onError: (error: any) => {
+      console.error("Delete error:", error);
+      
+      // Check if it's a conflict error with relationships
+      if (error.response?.status === 409) {
+        const details = error.response?.data?.details || {};
+        const { employeeCount, scheduleCount, appointmentCount } = details;
+        
+        let errorMessage = 'Cannot delete location with existing relationships: ';
+        if (employeeCount > 0) errorMessage += `${employeeCount} employees, `;
+        if (scheduleCount > 0) errorMessage += `${scheduleCount} schedules, `;
+        if (appointmentCount > 0) errorMessage += `${appointmentCount} appointments, `;
+        
+        // Remove trailing comma and space
+        errorMessage = errorMessage.replace(/, $/, '');
+        
+        toast.error(errorMessage);
+      } else {
+        toast.error('Failed to delete location');
+      }
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createLocation.mutate(formData);
+    
+    if (modalMode === ModalMode.CREATE) {
+      createLocation.mutate(formData);
+    } else if (modalMode === ModalMode.EDIT && currentLocationId) {
+      updateLocation.mutate({ id: currentLocationId, data: formData });
+    }
+  };
+  
+  const handleEditClick = (location: Location) => {
+    setModalMode(ModalMode.EDIT);
+    setCurrentLocationId(location.id);
+    setFormData({
+      name: location.name,
+      address: location.address,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (id: string) => {
+    if (window.confirm('Are you sure? This will permanently delete the location and cannot be undone.')) {
+      deleteLocation.mutate(id);
+    }
+  };
+
+  const handleAddLocation = () => {
+    setModalMode(ModalMode.CREATE);
+    setCurrentLocationId(null);
+    setFormData({ name: '', address: '' });
+    setIsModalOpen(true);
   };
 
   if (isLoading) {
@@ -70,7 +160,7 @@ export default function Locations() {
       <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-900">Locations</h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleAddLocation}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Add Location
@@ -99,13 +189,13 @@ export default function Locations() {
                   <div className="flex space-x-2">
                     <button
                       className="text-blue-600 hover:text-blue-900"
-                      onClick={() => {}}
+                      onClick={() => handleEditClick(location)}
                     >
                       Edit
                     </button>
                     <button
                       className="text-red-600 hover:text-red-900"
-                      onClick={() => {}}
+                      onClick={() => handleDeleteClick(location.id)}
                     >
                       Delete
                     </button>
@@ -130,6 +220,10 @@ export default function Locations() {
             {/* Modal panel */}
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {modalMode === ModalMode.CREATE ? 'Add New Location' : 'Edit Location'}
+                </h3>
+                
                 <div className="mb-4">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                     Name
@@ -162,9 +256,12 @@ export default function Locations() {
                   <button
                     type="submit"
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm"
-                    disabled={createLocation.isPending}
+                    disabled={createLocation.isPending || updateLocation.isPending}
                   >
-                    {createLocation.isPending ? 'Creating...' : 'Create'}
+                    {modalMode === ModalMode.CREATE 
+                      ? (createLocation.isPending ? 'Creating...' : 'Create') 
+                      : (updateLocation.isPending ? 'Updating...' : 'Update')
+                    }
                   </button>
                   <button
                     type="button"
