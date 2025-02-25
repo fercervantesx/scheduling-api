@@ -23,19 +23,61 @@ declare global {
   }
 }
 
-// Helper function to extract tenant from hostname
-const extractTenantFromHostname = async (hostname: string): Promise<PrismaTenant | null> => {
-  // Handle custom domains
-  const tenant = await prisma.tenant.findFirst({
-    where: {
-      OR: [
-        { customDomain: hostname },
-        { subdomain: hostname.split('.')[0] }
-      ]
+// Helper function to extract tenant from hostname or headers
+const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | null> => {
+  try {
+    // First check for X-Tenant-ID header for mobile app support
+    const tenantId = req.headers['x-tenant-id'] as string;
+    if (tenantId) {
+      console.log('🔍 Using tenant ID from X-Tenant-ID header:', tenantId);
+      
+      // Debug query
+      console.log('🔍 Looking for tenant with subdomain:', tenantId);
+      
+      // Get all tenants for debugging
+      const allTenants = await prisma.tenant.findMany({
+        select: { id: true, name: true, subdomain: true, status: true }
+      });
+      console.log('🔍 All available tenants:', JSON.stringify(allTenants));
+      
+      const tenant = await prisma.tenant.findFirst({
+        where: { subdomain: tenantId }
+      });
+      
+      if (tenant) {
+        console.log('✅ Found tenant:', tenant.name, tenant.id);
+      } else {
+        console.log('❌ No tenant found with subdomain:', tenantId);
+      }
+      
+      return tenant;
     }
-  });
-  
-  return tenant;
+    
+    // Fall back to hostname-based resolution
+    const hostname = req.hostname;
+    console.log('🔍 Using hostname for tenant resolution:', hostname);
+    
+    // Handle custom domains
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { customDomain: hostname },
+          { subdomain: hostname.split('.')[0] }
+        ]
+      }
+    });
+    
+    if (tenant) {
+      console.log('✅ Found tenant via hostname:', tenant.name, tenant.id);
+    } else {
+      console.log('❌ No tenant found for hostname:', hostname);
+    }
+    
+    return tenant;
+  } catch (error) {
+    console.error('💥 Error in extractTenantFromRequest:', error);
+    return null;
+  }
 };
 
 // Middleware to handle tenant resolution
@@ -106,7 +148,7 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
     }
 
     // Normal tenant resolution for production
-    const tenant = await extractTenantFromHostname(hostname);
+    const tenant = await extractTenantFromRequest(req);
     
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });

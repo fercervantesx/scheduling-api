@@ -5,9 +5,14 @@ import { checkJwt } from '../middleware/auth';
 const router = Router();
 
 // List all schedules
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
+    console.log('Fetching schedules for tenant:', req.tenant?.id);
+    
     const schedules = await prisma.schedule.findMany({
+      where: {
+        tenantId: req.tenant?.id,
+      },
       include: {
         employee: true,
         location: true,
@@ -17,6 +22,8 @@ router.get('/', async (_req: Request, res: Response) => {
         { startTime: 'asc' }
       ],
     });
+    
+    console.log(`Found ${schedules.length} schedules for tenant ${req.tenant?.id}`);
     return res.json(schedules);
   } catch (error) {
     console.error('Failed to fetch schedules:', error);

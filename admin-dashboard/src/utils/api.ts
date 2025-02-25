@@ -13,15 +13,34 @@ const api = axios.create({
   },
 });
 
-// Add request interceptor for logging
+// Add request interceptor for logging and tenant header handling
 api.interceptors.request.use(
   (config) => {
     // Log token information
     const authHeader = config.headers.Authorization;
+    
+    // Extract tenant from hostname for multi-tenant support
+    const hostname = window.location.hostname;
+    let tenantId = null;
+    
+    // Skip for localhost without subdomain
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      // Extract subdomain (everything before the first dot)
+      const parts = hostname.split('.');
+      if (parts.length > 1 && parts[0] !== 'www' && parts[0] !== 'admin') {
+        tenantId = parts[0];
+        // Add tenant header to all requests
+        config.headers['X-Tenant-ID'] = tenantId;
+        console.log(`📝 Setting tenant header from subdomain: ${tenantId}`);
+      }
+    }
+    
     console.log('API Request:', {
       url: config.url,
       fullUrl: `${config.baseURL}${config.url}`,
       method: config.method,
+      hostname: hostname,
+      tenant: tenantId,
       hasAuthHeader: !!authHeader,
       authHeaderType: authHeader ? typeof authHeader : 'none',
       authHeaderStart: authHeader ? `${String(authHeader).substring(0, 20)}...` : 'none',
