@@ -72,24 +72,32 @@ export const checkJwt = process.env.NODE_ENV === 'development'
       issuer: `https://${domain}/`,
       algorithms: ['RS256'],
       getToken: (req) => {
+        console.log('🔐 Auth Headers:', {
+          authorization: req.headers.authorization ? req.headers.authorization.substring(0, 30) + '...' : undefined,
+          path: req.path,
+          method: req.method,
+          tenant: req.tenant?.id
+        });
+        
         const authHeader = req.headers.authorization;
         
         if (!authHeader) {
-          console.log('No authorization header present');
+          console.log('🚫 No authorization header present for path:', req.path);
           return undefined;
         }
 
         if (!authHeader.includes('Bearer ')) {
-          console.log('No Bearer scheme in authorization header');
+          console.log('⚠️ No Bearer scheme in authorization header for path:', req.path);
           return undefined;
         }
 
         const token = authHeader.split('Bearer ')[1];
         if (!token) {
-          console.log('No token found after Bearer scheme');
+          console.log('⚠️ No token found after Bearer scheme for path:', req.path);
           return undefined;
         }
         
+        console.log('✅ Valid token format found for path:', req.path);
         return token;
       }
     });
@@ -97,7 +105,10 @@ export const checkJwt = process.env.NODE_ENV === 'development'
 // Middleware to decode user info
 export const decodeUserInfo = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   try {
+    console.log('👤 Decoding user info, auth payload:', req.auth?.payload ? 'Present' : 'Missing');
+    
     if (!req.auth?.payload) {
+      console.log('⚠️ No auth payload for path:', req.path);
       next();
       return;
     }
@@ -113,8 +124,16 @@ export const decodeUserInfo = async (req: Request, _res: Response, next: NextFun
       permissions: permissions || [],
     };
 
+    console.log('👤 User decoded:', {
+      sub: sub?.substring(0, 10) + '...',
+      email: email,
+      name: name || nickname,
+      hasPermissions: Array.isArray(permissions) && permissions.length > 0
+    });
+
     next();
   } catch (error) {
+    console.error('❌ Error in decodeUserInfo:', error);
     next(error);
   }
 };

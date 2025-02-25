@@ -23,13 +23,65 @@ declare global {
   }
 }
 
-// Helper function to extract tenant from hostname or headers
+// Helper function to extract tenant from hostname, headers, or query parameters
 const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | null> => {
   try {
-    // First check for X-Tenant-ID header for mobile app support
+    // DETAILED DEBUG: Check all request properties for tenant identification
+    console.log('🧪 DEBUG - Request params:', {
+      url: req.url,
+      originalUrl: req.originalUrl,
+      queryParams: req.query,
+      headers: {
+        host: req.headers.host,
+        tenantId: req.headers['x-tenant-id']
+      },
+      hostname: req.hostname,
+      path: req.path
+    });
+    
+    // First check for query parameter tenant_id (highest priority)
+    const queryTenantId = req.query.tenant_id as string;
+    console.log('🧪 DEBUG - Query tenant_id value:', queryTenantId, 'Type:', typeof queryTenantId);
+    
+    if (queryTenantId) {
+      console.log('🔍 Using tenant ID from query parameter:', queryTenantId);
+      
+      // Debug - get all tenants to verify connection
+      const allTenants = await prisma.tenant.findMany({
+        select: { id: true, name: true, subdomain: true }
+      });
+      console.log('🧪 DEBUG - All available tenants:', JSON.stringify(allTenants));
+      
+      // Try to find tenant by ID first if it looks like a UUID
+      if (queryTenantId.includes('-')) {
+        const tenantById = await prisma.tenant.findUnique({
+          where: { id: queryTenantId }
+        });
+        
+        if (tenantById) {
+          console.log('✅ Found tenant by ID from query parameter:', tenantById.name, tenantById.id);
+          return tenantById;
+        }
+      }
+      
+      // If not found by ID or not a UUID format, try by subdomain
+      const tenantBySubdomain = await prisma.tenant.findFirst({
+        where: { subdomain: queryTenantId }
+      });
+      
+      if (tenantBySubdomain) {
+        console.log('✅ Found tenant by subdomain from query parameter:', tenantBySubdomain.name, tenantBySubdomain.id);
+        return tenantBySubdomain;
+      } else {
+        console.log('❌ No tenant found with query parameter tenant_id:', queryTenantId);
+      }
+    }
+    
+    // Next check for X-Tenant-ID header for mobile app support
     const tenantId = req.headers['x-tenant-id'] as string;
     if (tenantId) {
       console.log('🔍 Using tenant ID from X-Tenant-ID header:', tenantId);
+      console.log('🔍 Request hostname:', req.hostname);
       
       // Debug query
       console.log('🔍 Looking for tenant with subdomain:', tenantId);
@@ -39,6 +91,17 @@ const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | nu
         select: { id: true, name: true, subdomain: true, status: true }
       });
       console.log('🔍 All available tenants:', JSON.stringify(allTenants));
+      
+      // For debugging, also verify if we can find tenant by ID (in case tenantId is an actual UUID)
+      if (tenantId.includes('-')) {
+        const tenantById = await prisma.tenant.findUnique({
+          where: { id: tenantId }
+        });
+        if (tenantById) {
+          console.log('🔍 Found tenant by direct ID (not subdomain):', tenantById.name, tenantById.id);
+          return tenantById;
+        }
+      }
       
       const tenant = await prisma.tenant.findFirst({
         where: { subdomain: tenantId }
@@ -56,16 +119,56 @@ const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | nu
     // Fall back to hostname-based resolution
     const hostname = req.hostname;
     console.log('🔍 Using hostname for tenant resolution:', hostname);
+    console.log('🔍 Subdomains from request:', req.subdomains);
     
-    // Handle custom domains
-    const tenant = await prisma.tenant.findFirst({
-      where: {
-        OR: [
-          { customDomain: hostname },
-          { subdomain: hostname.split('.')[0] }
-        ]
+    // Extract subdomain from the hostname
+    let subdomain = null;
+    const parts = hostname.split('.');
+    
+    // Handle the "subdomain.localhost" case for development
+    if (parts.length > 1) {
+      // Remove any port part from the hostname (localhost:5173 -> localhost)
+      for (let i = 0; i < parts.length; i++) {
+        if (parts[i].includes(':')) {
+          parts[i] = parts[i].split(':')[0];
+        }
       }
-    });
+      
+      if (parts[parts.length-1] === 'localhost' || parts[parts.length-1] === '127.0.0.1') {
+        // In development with localhost, use the first part as subdomain
+        subdomain = parts[0];
+        console.log('🔍 Development mode: extracted subdomain from localhost:', subdomain);
+      } else if (parts[0] !== 'www' && parts[0] !== 'admin') {
+        // Normal domain case
+        subdomain = parts[0];
+        console.log('🔍 Production mode: extracted subdomain:', subdomain);
+      }
+    }
+    
+    // Handle custom domains and subdomains
+    let tenant = null;
+    
+    if (subdomain) {
+      // Try to find by subdomain first
+      tenant = await prisma.tenant.findFirst({
+        where: { subdomain: subdomain }
+      });
+      
+      if (tenant) {
+        console.log('🔍 Found tenant by subdomain:', tenant.name, tenant.id);
+      }
+    }
+    
+    // If not found by subdomain, try custom domain
+    if (!tenant) {
+      tenant = await prisma.tenant.findFirst({
+        where: { customDomain: hostname }
+      });
+      
+      if (tenant) {
+        console.log('🔍 Found tenant by custom domain:', tenant.name, tenant.id);
+      }
+    }
     
     if (tenant) {
       console.log('✅ Found tenant via hostname:', tenant.name, tenant.id);
@@ -83,6 +186,15 @@ const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | nu
 // Middleware to handle tenant resolution
 export const resolveTenant = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    // Debug all request properties for tenant identification
+    console.log('🧪 TENANT MIDDLEWARE DEBUG:', {
+      url: req.url,
+      originalUrl: req.originalUrl,
+      query: req.query,
+      tenantIdHeader: req.headers['x-tenant-id'],
+      hostname: req.hostname
+    });
+    
     const hostname = req.hostname;
     
     // Skip tenant resolution for the admin dashboard
@@ -91,8 +203,15 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    // DEVELOPMENT MODE: For local development with localhost, use a default tenant
-    if (process.env.NODE_ENV === 'development' && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+    // DEVELOPMENT MODE: For plain localhost without subdomain, check query and header first, then use default
+    // Skip this fallback if we already found a tenant via query param or header
+    const parts = hostname.split('.');
+    const wasAlreadyProcessed = req.headers['x-tenant-id'] || req.query.tenant_id;
+    
+    if (!wasAlreadyProcessed && 
+        process.env.NODE_ENV === 'development' && 
+        ((hostname === 'localhost' || hostname === '127.0.0.1') && parts.length === 1)) {
+      console.log('🔍 Using default tenant for plain localhost');
       // Get the first active tenant for development
       const defaultTenant = await prisma.tenant.findFirst({
         where: { status: 'ACTIVE' }
@@ -188,6 +307,16 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
       trialEndsAt: tenant.trialEndsAt
     };
 
+    console.log('🔑 TENANT SET FOR THIS REQUEST:', {
+      id: tenant.id,
+      name: tenant.name,
+      subdomain: tenant.subdomain,
+      path: req.path,
+      method: req.method,
+      hostName: req.hostname,
+      tenantIdHeader: req.headers['x-tenant-id']
+    });
+
     next();
   } catch (error) {
     console.error('Tenant resolution error:', error);
@@ -197,13 +326,20 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
 
 // Middleware to enforce tenant isolation in database queries
 export const enforceTenantIsolation = (req: Request, res: Response, next: NextFunction): void => {
-  // Skip for admin dashboard or in development mode with localhost
-  if (
-    req.hostname.startsWith('admin.') || 
-    (process.env.NODE_ENV === 'development' && (req.hostname === 'localhost' || req.hostname === '127.0.0.1'))
-  ) {
+  // Skip for admin dashboard
+  if (req.hostname.startsWith('admin.')) {
     next();
     return;
+  }
+
+  // For development mode, only skip tenant isolation when using plain localhost without subdomains
+  if (process.env.NODE_ENV === 'development') {
+    const parts = req.hostname.split('.');
+    // Only skip for plain localhost without subdomain
+    if ((req.hostname === 'localhost' || req.hostname === '127.0.0.1') && parts.length === 1) {
+      next();
+      return;
+    }
   }
 
   if (!req.tenant) {
@@ -216,10 +352,14 @@ export const enforceTenantIsolation = (req: Request, res: Response, next: NextFu
 // Middleware to check feature access
 export const checkFeatureAccess = (featureName: string) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // In development mode with localhost, allow all features
-    if (process.env.NODE_ENV === 'development' && (req.hostname === 'localhost' || req.hostname === '127.0.0.1')) {
-      next();
-      return;
+    // In development mode with plain localhost (no subdomain), allow all features
+    if (process.env.NODE_ENV === 'development') {
+      const parts = req.hostname.split('.');
+      // Only skip feature checks for plain localhost without subdomain
+      if ((req.hostname === 'localhost' || req.hostname === '127.0.0.1') && parts.length === 1) {
+        next();
+        return;
+      }
     }
     
     if (!req.tenant) {

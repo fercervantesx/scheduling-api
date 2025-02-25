@@ -134,6 +134,32 @@ function AppContent() {
                 </p>
               </div>
             </div>
+            
+            {/* Tenant Selector */}
+            <div className="mt-4">
+              <label htmlFor="tenant-selector" className="block text-xs font-medium text-gray-500 mb-1">
+                Tenant ID
+              </label>
+              <select
+                id="tenant-selector"
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 text-sm"
+                value={localStorage.getItem('currentTenantId') || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value) {
+                    localStorage.setItem('currentTenantId', value);
+                    window.location.reload(); // Reload the page to apply the new tenant
+                  } else {
+                    localStorage.removeItem('currentTenantId');
+                    window.location.reload();
+                  }
+                }}
+              >
+                <option value="">Select Tenant</option>
+                <option value="itinaritravel">Itinari Travel</option>
+                <option value="demo">Demo Salon</option>
+              </select>
+            </div>
           </div>
 
           {/* Navigation */}

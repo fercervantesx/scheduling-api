@@ -6,15 +6,29 @@ import { checkQuota } from '../middleware/quota-enforcement';
 const router = Router();
 
 // List all locations
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', checkJwt, async (req: Request, res: Response) => {
   try {
+    console.log('🏙️ Fetching locations for tenant:', req.tenant?.id);
+    
     const locations = await prisma.location.findMany({
       where: {
         tenantId: req.tenant?.id,
       },
     });
+    
+    console.log(`📍 Found ${locations.length} locations for tenant ${req.tenant?.id || 'unknown'}`);
+    
+    if (locations.length === 0) {
+      // Add debug information for empty locations
+      const allLocations = await prisma.location.findMany({
+        select: { id: true, name: true, tenantId: true }
+      });
+      console.log('📊 All locations in system:', JSON.stringify(allLocations));
+    }
+    
     return res.json(locations);
   } catch (error) {
+    console.error('❌ Error fetching locations:', error);
     return res.status(500).json({ error: 'Failed to fetch locations' });
   }
 });

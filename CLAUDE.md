@@ -10,6 +10,19 @@
 - `npm run prisma:generate` - Generate Prisma Client
 - `npm run prisma:migrate` - Run database migrations
 
+## Docker Development
+
+### Running with source mounted (for development):
+```
+docker-compose up --build
+```
+
+### Running without source mount (for production-like testing):
+```
+# Create a test compose file with no volume mounts 
+docker-compose -f docker-compose.test.yml up --build
+```
+
 ## Style Guidelines
 - **Imports**: Group by external packages first, then internal modules
 - **Naming**: camelCase for variables/functions, PascalCase for types/interfaces

@@ -11,6 +11,9 @@ import app from './app'; // Import the app from app.ts
 // Load environment variables
 dotenv.config();
 
+// Configure Express to recognize subdomains with localhost
+app.set('subdomain offset', 1); // This is critical for localhost subdomains
+
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Routes - these are in addition to those in app.ts

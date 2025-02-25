@@ -6,10 +6,25 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005';
 // For debugging API URL issues
 console.log('API URL:', API_URL);
 
+// Check if a specific tenant ID is set in localStorage (for manual override)
+const storedTenantId = localStorage.getItem('currentTenantId');
+
+// Get URL search params for tenant selection
+const urlParams = new URLSearchParams(window.location.search);
+const tenantParam = urlParams.get('tenant');
+
+// If tenant param exists, store it for future use
+if (tenantParam) {
+  localStorage.setItem('currentTenantId', tenantParam);
+  console.log(`Setting tenant ID from URL param: ${tenantParam}`);
+}
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
+    // If we have a tenant param or stored tenant ID, add it to default headers
+    ...(tenantParam || storedTenantId ? { 'X-Tenant-ID': tenantParam || storedTenantId } : {}),
   },
 });
 
@@ -19,16 +34,50 @@ api.interceptors.request.use(
     // Log token information
     const authHeader = config.headers.Authorization;
     
-    // Extract tenant from hostname for multi-tenant support
+    // Check existing X-Tenant-ID header
+    const existingTenantId = config.headers['X-Tenant-ID'];
+    if (existingTenantId) {
+      console.log(`📝 Using existing tenant header: ${existingTenantId}`);
+      return config;
+    }
+    
+    // Get tenant from URL param
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantParam = urlParams.get('tenant');
+    if (tenantParam) {
+      config.headers['X-Tenant-ID'] = tenantParam;
+      console.log(`📝 Setting tenant header from URL parameter: ${tenantParam}`);
+      return config;
+    }
+    
+    // Get stored tenant from localStorage
+    const storedTenantId = localStorage.getItem('currentTenantId');
+    if (storedTenantId) {
+      config.headers['X-Tenant-ID'] = storedTenantId;
+      console.log(`📝 Setting tenant header from localStorage: ${storedTenantId}`);
+      return config;
+    }
+    
+    // Extract tenant from hostname as a fallback
     const hostname = window.location.hostname;
     let tenantId = null;
     
-    // Skip for localhost without subdomain
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      // Extract subdomain (everything before the first dot)
-      const parts = hostname.split('.');
-      if (parts.length > 1 && parts[0] !== 'www' && parts[0] !== 'admin') {
+    // Extract subdomain (everything before the first dot)
+    const parts = hostname.split('.');
+    
+    // Check if this is a localhost with a subdomain (e.g., itinaritravel.localhost)
+    if (parts.length > 1) {
+      if (parts[parts.length-1] === 'localhost' || parts[parts.length-1] === '127.0.0.1') {
+        // For localhost with subdomain, use the first part
+        if (parts[0] !== 'www' && parts[0] !== 'admin') {
+          tenantId = parts[0];
+        }
+      } else if (parts[0] !== 'www' && parts[0] !== 'admin') {
+        // For regular domain with subdomain
         tenantId = parts[0];
+      }
+      
+      if (tenantId) {
         // Add tenant header to all requests
         config.headers['X-Tenant-ID'] = tenantId;
         console.log(`📝 Setting tenant header from subdomain: ${tenantId}`);

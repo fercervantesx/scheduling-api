@@ -66,9 +66,11 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     // Create date boundaries in local time
     const startOfDay = new Date(localDate);
     startOfDay.setHours(0, 0, 0, 0);
+    console.log('Start of day (local):', startOfDay.toISOString());
     
     const endOfDay = new Date(localDate);
     endOfDay.setHours(23, 59, 59, 999);
+    console.log('End of day (local):', endOfDay.toISOString());
 
     // Get all appointments for the employee in the date range
     const appointments = await prisma.appointment.findMany({
@@ -99,12 +101,20 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     // Create schedule boundaries in local time first
     const scheduleStart = new Date(localDate);
     scheduleStart.setHours(scheduleStartHour, scheduleStartMinute, 0, 0);
+    console.log('Schedule start (local):', scheduleStart.toISOString(), 'Original:', schedule.startTime);
     
     const scheduleEnd = new Date(localDate);
     scheduleEnd.setHours(scheduleEndHour, scheduleEndMinute, 0, 0);
+    console.log('Schedule end (local):', scheduleEnd.toISOString(), 'Original:', schedule.endTime);
 
     // Calculate available slots
-    const slots: { startTime: string; endTime: string }[] = [];
+    const slots: { 
+      startTime: string; 
+      endTime: string; 
+      displayTime: string;
+      localStartTime: string;
+      localEndTime: string;
+    }[] = [];
     let currentTime = new Date(scheduleStart);
     const slotDuration = service.duration * 60 * 1000; // Convert minutes to milliseconds
 
@@ -119,13 +129,30 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       });
 
       if (!hasConflict) {
-        // Convert local times to UTC for storage
+        // Create properly formatted date objects
         const utcStart = new Date(currentTime);
         const utcEnd = new Date(slotEnd);
 
+        // Format time display for readability in local timezone
+        const displayStart = utcStart.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: true 
+        });
+        
+        const displayEnd = utcEnd.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: true 
+        });
+
+        // Add the slot with both ISO and display formats
         slots.push({
           startTime: utcStart.toISOString(),
           endTime: utcEnd.toISOString(),
+          displayTime: `${displayStart} - ${displayEnd}`,
+          localStartTime: displayStart,
+          localEndTime: displayEnd
         });
       }
 
@@ -133,7 +160,21 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000);
     }
 
-    return res.json(slots);
+    console.log(`Generated ${slots.length} available slots with timezone information`);
+    
+    // Log a sample slot for debugging
+    if (slots.length > 0) {
+      console.log('Sample slot:', slots[0]);
+    }
+    
+    return res.json({
+      slots,
+      tenantInfo: {
+        id: req.tenant?.id || 'No tenant ID',
+        name: req.tenant?.name || 'No tenant name',
+        subdomain: req.tenant?.subdomain || 'No subdomain'
+      }
+    });
   } catch (error) {
     console.error('Failed to fetch availability:', error);
     return res.status(500).json({ 

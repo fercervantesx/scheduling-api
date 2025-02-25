@@ -14,6 +14,9 @@ interface AvailabilityFormData {
 interface TimeSlot {
   startTime: string;
   endTime: string;
+  displayTime?: string;
+  localStartTime?: string;
+  localEndTime?: string;
 }
 
 export default function Availability() {
@@ -239,11 +242,16 @@ export default function Availability() {
                   `}
                 >
                   <div className="font-medium">
-                    {formatTimeSlot(slot.startTime)}
+                    {slot.localStartTime || formatTimeSlot(slot.startTime)}
                   </div>
                   <div className="text-sm opacity-75">
-                    to {formatTimeSlot(slot.endTime)}
+                    to {slot.localEndTime || formatTimeSlot(slot.endTime)}
                   </div>
+                  {slot.displayTime && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {slot.displayTime}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>

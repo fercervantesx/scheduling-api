@@ -8,6 +8,10 @@ const router = Router();
 // List all employees
 router.get('/', async (req: Request, res: Response) => {
   try {
+    console.log('👥 Fetching employees for tenant:', req.tenant?.id);
+    console.log('👥 Request hostname:', req.hostname);
+    console.log('👥 X-Tenant-ID header:', req.headers['x-tenant-id']);
+    
     const employees = await prisma.employee.findMany({
       where: {
         tenantId: req.tenant?.id,
@@ -20,8 +24,20 @@ router.get('/', async (req: Request, res: Response) => {
         },
       },
     });
+    
+    console.log(`👥 Found ${employees.length} employees for tenant ${req.tenant?.id || 'unknown'}`);
+    
+    if (employees.length === 0) {
+      // For debugging, show all employees when none are found
+      const allEmployees = await prisma.employee.findMany({
+        select: { id: true, name: true, tenantId: true }
+      });
+      console.log('👥 All employees in system:', JSON.stringify(allEmployees));
+    }
+    
     return res.json(employees);
   } catch (error) {
+    console.error('❌ Error fetching employees:', error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
