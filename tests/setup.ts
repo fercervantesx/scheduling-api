@@ -12,7 +12,8 @@ jest.mock('../src/lib/prisma', () => ({
   prisma: mockDeep<PrismaClient>(),
 }));
 
-// Mock auth middleware
+// Mock auth middleware for route handlers
+// This creates a default export for auth middleware to use in route tests
 jest.mock('../src/middleware/auth', () => ({
   checkJwt: (req: any, res: any, next: any) => {
     if (!req.headers.authorization) {
@@ -29,6 +30,28 @@ jest.mock('../src/middleware/auth', () => ({
     };
     next();
   },
+  // Add decodeUserInfo middleware
+  decodeUserInfo: (req: any, _res: any, next: any) => {
+    if (req.auth?.payload) {
+      req.user = {
+        sub: req.auth.payload.sub,
+        email: req.auth.payload.email,
+        name: req.auth.payload.name || req.auth.payload.nickname || req.auth.payload.email?.split('@')[0],
+        permissions: req.auth.payload.permissions || []
+      };
+    }
+    next();
+  },
+  // Add checkRole middleware
+  checkRole: (role: string) => (req: any, _res: any, next: any) => {
+    if (!req.user || !req.user.permissions || !req.user.permissions.includes(role)) {
+      return _res.status(403).json({
+        error: 'Forbidden',
+        message: `Required role: ${role}`
+      });
+    }
+    next();
+  }
 }));
 
 // Get the mock prisma instance
@@ -37,4 +60,4 @@ export const prismaMock = mockDeep<PrismaClient>() as DeepMockProxy<PrismaClient
 // Ensure mocks are cleared before each test
 beforeEach(() => {
   mockReset(prismaMock);
-}); 
+});

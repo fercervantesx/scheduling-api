@@ -16,8 +16,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Admin routes - use standalone configuration for these routes
+// Admin routes - register them with both patterns for flexibility
 app.use('/api/admin/tenants', tenantsRouter);
+// Also register without /api prefix for direct access
+app.use('/admin/tenants', tenantsRouter);
 
 // Generic error handlers will be added in index.ts
 

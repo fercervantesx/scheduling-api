@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Default to 'http://localhost:3005/api' in development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
+// Default to 'http://localhost:3005' in development (without /api)
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005';
 
 // For debugging API URL issues
 console.log('API URL:', API_URL);

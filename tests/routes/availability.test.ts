@@ -6,6 +6,14 @@ import { mockJwt } from '../utils/auth-mock';
 import { Service, Schedule, Appointment } from '../types/models';
 import { checkJwt } from '../../src/middleware/auth';
 
+// Mock tenant middleware
+jest.mock('../../src/middleware/tenant', () => ({
+  enforceTenantIsolation: (req: any, _res: any, next: any) => {
+    req.tenant = { id: 'tenant-123' };
+    next();
+  }
+}));
+
 const app = express();
 app.use(express.json());
 app.use('/api/availability', checkJwt, availabilityRoutes);
@@ -15,6 +23,7 @@ describe('Availability Routes', () => {
     id: '123e4567-e89b-12d3-a456-426614174001',
     name: 'Test Service',
     duration: 60, // 60 minutes
+    tenantId: 'tenant-123',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -23,9 +32,11 @@ describe('Availability Routes', () => {
     id: '123e4567-e89b-12d3-a456-426614174002',
     employeeId: '123e4567-e89b-12d3-a456-426614174003',
     locationId: '123e4567-e89b-12d3-a456-426614174004',
-    startTime: new Date('2024-03-20T09:00:00Z'),
-    endTime: new Date('2024-03-20T17:00:00Z'),
+    startTime: '09:00',
+    endTime: '17:00',
+    weekday: 'WEDNESDAY',
     blockType: 'WORKING_HOURS',
+    tenantId: 'tenant-123',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -63,6 +74,10 @@ describe('Availability Routes', () => {
         status: 'SCHEDULED',
         canceledBy: null,
         cancelReason: null,
+        tenantId: 'tenant-123',
+        bookedBy: 'auth0|123456',
+        bookedByName: 'Test User',
+        userId: 'auth0|123456',
         createdAt: new Date(),
         updatedAt: new Date(),
       }];

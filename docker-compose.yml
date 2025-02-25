@@ -44,6 +44,11 @@ services:
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
       - PORT=3000
+      - AUTH0_DOMAIN=itinari.us.auth0.com
+      - AUTH0_AUDIENCE=https://itinari.com
+      - AUTH0_CLIENT_ID=kXLq8yqzp8pZMDlathOw7ppm00p80iC6
+      - AUTH0_MANAGEMENT_CLIENT_ID=kkRnHreCLRE1vD6M1Qn9vqKQ7P6swGz2 
+      - AUTH0_MANAGEMENT_CLIENT_SECRET=P9hOTvDK2Qhke5vFrwmYH8450qYLEf14SeEe1Q9Qp15U4T2cIVLJ19sBqXp97S1_
     depends_on:
       db:
         condition: service_healthy

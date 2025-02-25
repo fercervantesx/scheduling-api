@@ -6,6 +6,14 @@ import { mockJwt } from '../utils/auth-mock';
 import { Appointment, Service } from '../types/models';
 import { checkJwt } from '../../src/middleware/auth';
 
+// Mock tenant middleware
+jest.mock('../../src/middleware/tenant', () => ({
+  enforceTenantIsolation: (req: any, _res: any, next: any) => {
+    req.tenant = { id: 'tenant-123' };
+    next();
+  }
+}));
+
 const app = express();
 app.use(express.json());
 app.use('/api/appointments', checkJwt, appointmentRoutes);
@@ -20,6 +28,10 @@ describe('Appointment Routes', () => {
     status: 'SCHEDULED',
     canceledBy: null,
     cancelReason: null,
+    tenantId: 'tenant-123',
+    bookedBy: 'auth0|123456',
+    bookedByName: 'Test User',
+    userId: 'auth0|123456',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -54,6 +66,7 @@ describe('Appointment Routes', () => {
       id: mockAppointment.serviceId,
       name: 'Test Service',
       duration: 60,
+      tenantId: 'tenant-123',
       createdAt: new Date(),
       updatedAt: new Date(),
     };

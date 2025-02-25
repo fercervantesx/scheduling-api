@@ -6,6 +6,14 @@ import { mockJwt } from '../utils/auth-mock';
 import { Location } from '../types/models';
 import { checkJwt } from '../../src/middleware/auth';
 
+// Mock tenant middleware
+jest.mock('../../src/middleware/tenant', () => ({
+  enforceTenantIsolation: (req: any, _res: any, next: any) => {
+    req.tenant = { id: 'tenant-123' };
+    next();
+  }
+}));
+
 const app = express();
 app.use(express.json());
 app.use('/api/locations', checkJwt, locationRoutes);
@@ -18,6 +26,7 @@ describe('Location Routes', () => {
           id: '123e4567-e89b-12d3-a456-426614174000',
           name: 'Test Location 1',
           address: '123 Test St',
+          tenantId: 'tenant-123',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -25,6 +34,7 @@ describe('Location Routes', () => {
           id: '123e4567-e89b-12d3-a456-426614174001',
           name: 'Test Location 2',
           address: '456 Test Ave',
+          tenantId: 'tenant-123',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -62,6 +72,7 @@ describe('Location Routes', () => {
       const createdLocation: Location = {
         id: '123e4567-e89b-12d3-a456-426614174002',
         ...mockLocation,
+        tenantId: 'tenant-123',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -100,6 +111,7 @@ describe('Location Routes', () => {
       id: '123e4567-e89b-12d3-a456-426614174000',
       name: 'Test Location',
       address: '123 Test St',
+      tenantId: 'tenant-123',
       createdAt: new Date(),
       updatedAt: new Date(),
       employees: [],
