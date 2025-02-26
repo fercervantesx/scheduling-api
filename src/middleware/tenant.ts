@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../lib/prisma';
-import type { Tenant as PrismaTenant } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { supabase, extractTenantFromRequest, setTenantContext, uploadTenantFile, deleteTenantFile } from '../lib/supabase';
 
 // Extend Express Request type to include tenant information
 declare global {
@@ -26,19 +25,18 @@ declare global {
   }
 }
 
-// Ensure uploads directory exists
+// Temporary uploads directory for multer - will be replaced by Supabase Storage
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads
+// Configure multer for file uploads with temporary disk storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    // NOTE: In production, use a cloud storage solution like AWS S3 or Google Cloud Storage
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
     const tenantId = req.tenant?.id || 'unknown';
     cb(null, `tenant-${tenantId}-${uniqueSuffix}${path.extname(file.originalname)}`);
@@ -59,113 +57,47 @@ export const upload = multer({
   }
 });
 
-// Helper function to generate the URL for an uploaded file
-export const getUploadedFileUrl = (req: Request, filename: string): string => {
-  // Get server base URL
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-  const host = req.headers.host;
-  const baseUrl = `${protocol}://${host}`;
-  
-  // Create the public URL for the uploaded file
-  const relativePath = `/uploads/${filename}`;
-  return `${baseUrl}${relativePath}`;
+// Helper function to upload a file to Supabase storage from the temporary storage
+export const uploadToSupabase = async (req: Request, filePath: string): Promise<string | null> => {
+  try {
+    if (!req.tenant) {
+      throw new Error('Tenant context required');
+    }
+    
+    // Read the file from temporary storage
+    const fileBuffer = fs.readFileSync(filePath);
+    const fileName = path.basename(filePath);
+    const contentType = fileName.endsWith('.png') ? 'image/png' : 
+                         fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') ? 'image/jpeg' : 
+                         fileName.endsWith('.gif') ? 'image/gif' : 'application/octet-stream';
+    
+    // Upload to Supabase storage
+    const publicUrl = await uploadTenantFile(req.tenant.id, fileBuffer, fileName, contentType);
+    
+    // Delete the temporary file
+    fs.unlinkSync(filePath);
+    
+    return publicUrl;
+  } catch (error) {
+    console.error('Error uploading to Supabase:', error);
+    return null;
+  }
 };
 
-// Helper function to extract tenant from hostname, headers, or query parameters
-const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | null> => {
+// Helper function to delete a file from Supabase storage
+export const deleteFromSupabase = async (req: Request, fileUrl: string): Promise<boolean> => {
   try {
-    // First check for query parameter tenant_id (highest priority)
-    const queryTenantId = req.query.tenant_id as string;
-    
-    if (queryTenantId) {
-      
-      // Try to find tenant by ID first if it looks like a UUID
-      if (queryTenantId.includes('-')) {
-        const tenantById = await prisma.tenant.findUnique({
-          where: { id: queryTenantId }
-        });
-        
-        if (tenantById) {
-          return tenantById;
-        }
-      }
-      
-      // If not found by ID or not a UUID format, try by subdomain
-      const tenantBySubdomain = await prisma.tenant.findFirst({
-        where: { subdomain: queryTenantId }
-      });
-      
-      if (tenantBySubdomain) {
-        return tenantBySubdomain;
-      }
+    if (!req.tenant) {
+      throw new Error('Tenant context required');
     }
     
-    // Next check for X-Tenant-ID header for mobile app support
-    const tenantId = req.headers['x-tenant-id'] as string;
-    if (tenantId) {
-      // First check if the header contains a UUID
-      if (tenantId.includes('-')) {
-        const tenantById = await prisma.tenant.findUnique({
-          where: { id: tenantId }
-        });
-        if (tenantById) {
-          return tenantById;
-        }
-      }
-      
-      // Then try to find by subdomain
-      const tenant = await prisma.tenant.findFirst({
-        where: { subdomain: tenantId }
-      });
-      
-      return tenant;
-    }
+    const urlObj = new URL(fileUrl);
+    const filePath = urlObj.pathname.split('/').pop() || '';
     
-    // Fall back to hostname-based resolution
-    const hostname = req.hostname;
-    
-    // Extract subdomain from the hostname
-    let subdomain = null;
-    const parts = hostname.split('.');
-    
-    // Handle the "subdomain.localhost" case for development
-    if (parts.length > 1) {
-      // Remove any port part from the hostname (localhost:5173 -> localhost)
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i].includes(':')) {
-          parts[i] = parts[i].split(':')[0];
-        }
-      }
-      
-      if (parts[parts.length-1] === 'localhost' || parts[parts.length-1] === '127.0.0.1') {
-        // In development with localhost, use the first part as subdomain
-        subdomain = parts[0];
-      } else if (parts[0] !== 'www' && parts[0] !== 'admin') {
-        // Normal domain case
-        subdomain = parts[0];
-      }
-    }
-    
-    // Handle custom domains and subdomains
-    let tenant = null;
-    
-    if (subdomain) {
-      // Try to find by subdomain first
-      tenant = await prisma.tenant.findFirst({
-        where: { subdomain: subdomain }
-      });
-    }
-    
-    // If not found by subdomain, try custom domain
-    if (!tenant) {
-      tenant = await prisma.tenant.findFirst({
-        where: { customDomain: hostname }
-      });
-    }
-    
-    return tenant;
+    return await deleteTenantFile(req.tenant.id, filePath);
   } catch (error) {
-    return null;
+    console.error('Error deleting from Supabase:', error);
+    return false;
   }
 };
 
@@ -179,76 +111,86 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
       next();
       return;
     }
-
-    // DEVELOPMENT MODE: For plain localhost without subdomain, check query and header first, then use default
-    // Skip this fallback if we already found a tenant via query param or header
-    const parts = hostname.split('.');
-    const wasAlreadyProcessed = req.headers['x-tenant-id'] || req.query.tenant_id;
     
-    if (!wasAlreadyProcessed && 
-        process.env.NODE_ENV === 'development' && 
-        ((hostname === 'localhost' || hostname === '127.0.0.1') && parts.length === 1)) {
-      // Get the first active tenant for development
-      const defaultTenant = await prisma.tenant.findFirst({
-        where: { status: 'ACTIVE' }
-      });
-
-      if (defaultTenant) {
-        req.tenant = {
-          id: defaultTenant.id,
-          name: defaultTenant.name,
-          email: defaultTenant.email || undefined,
-          subdomain: defaultTenant.subdomain,
-          customDomain: defaultTenant.customDomain,
-          status: defaultTenant.status,
-          plan: defaultTenant.plan,
-          settings: defaultTenant.settings,
-          branding: defaultTenant.branding,
-          features: defaultTenant.features,
-          trialEndsAt: defaultTenant.trialEndsAt
-        };
-        next();
-        return;
-      } else {
-        
-        // Create a default tenant for development
-        const newTenant = await prisma.tenant.create({
-          data: {
-            name: 'Development Tenant',
-            subdomain: 'dev',
-            status: 'ACTIVE',
-            plan: 'PRO',
-            features: { locations: true, employees: true },
-          }
-        });
-        
-        req.tenant = {
-          id: newTenant.id,
-          name: newTenant.name,
-          email: newTenant.email || undefined,
-          subdomain: newTenant.subdomain,
-          customDomain: newTenant.customDomain,
-          status: newTenant.status,
-          plan: newTenant.plan,
-          settings: newTenant.settings || {},
-          branding: newTenant.branding || {},
-          features: newTenant.features || {},
-          trialEndsAt: newTenant.trialEndsAt
-        };
-        
-        next();
-        return;
-      }
-    }
-
-    // Normal tenant resolution for production
+    // Extract tenant from request (query, header, hostname)
     const tenant = await extractTenantFromRequest(req);
     
     if (!tenant) {
+      // DEVELOPMENT MODE: For plain localhost without subdomain, use default
+      const parts = hostname.split('.');
+      const isPlainLocalhost = (hostname === 'localhost' || hostname === '127.0.0.1') && parts.length === 1;
+      
+      if (process.env.NODE_ENV === 'development' && isPlainLocalhost) {
+        // Get the first active tenant for development
+        const { data: defaultTenant, error } = await supabase
+          .from('tenants')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .limit(1)
+          .single();
+        
+        if (!error && defaultTenant) {
+          req.tenant = {
+            id: defaultTenant.id,
+            name: defaultTenant.name,
+            email: defaultTenant.email || undefined,
+            subdomain: defaultTenant.subdomain,
+            customDomain: defaultTenant.custom_domain,
+            status: defaultTenant.status,
+            plan: defaultTenant.plan,
+            settings: defaultTenant.settings,
+            branding: defaultTenant.branding,
+            features: defaultTenant.features,
+            trialEndsAt: defaultTenant.trial_ends_at ? new Date(defaultTenant.trial_ends_at) : null
+          };
+          
+          // Set tenant context for RLS
+          await setTenantContext(defaultTenant.id);
+          
+          next();
+          return;
+        } else {
+          // Create a default tenant for development
+          const { data: newTenant, error } = await supabase
+            .from('tenants')
+            .insert({
+              name: 'Development Tenant',
+              subdomain: 'dev',
+              status: 'ACTIVE',
+              plan: 'PRO',
+              features: { locations: true, employees: true }
+            })
+            .select()
+            .single();
+          
+          if (!error && newTenant) {
+            req.tenant = {
+              id: newTenant.id,
+              name: newTenant.name,
+              email: newTenant.email || undefined,
+              subdomain: newTenant.subdomain,
+              customDomain: newTenant.custom_domain,
+              status: newTenant.status,
+              plan: newTenant.plan,
+              settings: newTenant.settings || {},
+              branding: newTenant.branding || {},
+              features: newTenant.features || {},
+              trialEndsAt: newTenant.trial_ends_at ? new Date(newTenant.trial_ends_at) : null
+            };
+            
+            // Set tenant context for RLS
+            await setTenantContext(newTenant.id);
+            
+            next();
+            return;
+          }
+        }
+      }
+      
       res.status(404).json({ error: 'Tenant not found' });
       return;
     }
-
+    
     // Check tenant status
     if (tenant.status !== 'ACTIVE' && tenant.status !== 'TRIAL') {
       res.status(403).json({ 
@@ -257,35 +199,37 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
       });
       return;
     }
-
+    
     // Check if trial has expired
-    if (tenant.status === 'TRIAL' && tenant.trialEndsAt && tenant.trialEndsAt < new Date()) {
+    if (tenant.status === 'TRIAL' && tenant.trial_ends_at && new Date(tenant.trial_ends_at) < new Date()) {
       res.status(402).json({ 
         error: 'Trial period has expired',
-        trialEndDate: tenant.trialEndsAt
+        trialEndDate: tenant.trial_ends_at
       });
       return;
     }
-
+    
     // Attach tenant to request
     req.tenant = {
       id: tenant.id,
       name: tenant.name,
       email: tenant.email || undefined,
       subdomain: tenant.subdomain,
-      customDomain: tenant.customDomain,
+      customDomain: tenant.custom_domain,
       status: tenant.status,
       plan: tenant.plan,
       settings: tenant.settings,
       branding: tenant.branding,
       features: tenant.features,
-      trialEndsAt: tenant.trialEndsAt
+      trialEndsAt: tenant.trial_ends_at ? new Date(tenant.trial_ends_at) : null
     };
-
-    // Tenant successfully set for this request
-
+    
+    // Set tenant context for RLS
+    await setTenantContext(tenant.id);
+    
     next();
   } catch (error) {
+    console.error('Error resolving tenant:', error);
     res.status(500).json({ error: 'Failed to resolve tenant' });
   }
 };
@@ -297,7 +241,7 @@ export const enforceTenantIsolation = (req: Request, res: Response, next: NextFu
     next();
     return;
   }
-
+  
   // For development mode, only skip tenant isolation when using plain localhost without subdomains
   if (process.env.NODE_ENV === 'development') {
     const parts = req.hostname.split('.');
@@ -307,11 +251,12 @@ export const enforceTenantIsolation = (req: Request, res: Response, next: NextFu
       return;
     }
   }
-
+  
   if (!req.tenant) {
     res.status(400).json({ error: 'Tenant context required' });
     return;
   }
+  
   next();
 };
 
@@ -332,7 +277,7 @@ export const checkFeatureAccess = (featureName: string) => {
       next();
       return;
     }
-
+    
     // Allow access to all features for ADMIN in dev environment
     if (process.env.NODE_ENV === 'development' && 
         req.user && 
@@ -342,7 +287,7 @@ export const checkFeatureAccess = (featureName: string) => {
       next();
       return;
     }
-
+    
     const features = req.tenant.features || {};
     if (!features[featureName]) {
       res.status(403).json({ 
@@ -352,7 +297,7 @@ export const checkFeatureAccess = (featureName: string) => {
       });
       return;
     }
-
+    
     next();
   };
-}; 
+};

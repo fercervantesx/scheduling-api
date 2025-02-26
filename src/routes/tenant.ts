@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
 import { checkJwt, decodeUserInfo } from '../middleware/auth';
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
-import { upload, getUploadedFileUrl } from '../middleware/tenant';
+import { upload, uploadToSupabase, deleteFromSupabase } from '../middleware/tenant';
+import { supabase } from '../lib/supabase';
 
 const router = Router();
 
@@ -33,6 +33,7 @@ router.get('/plan', [checkJwt, decodeUserInfo], async (req: Request, res: Respon
       features
     });
   } catch (error) {
+    console.error('Error getting tenant plan:', error);
     return res.status(500).json({ error: 'Failed to get tenant plan' });
   }
 });
@@ -52,6 +53,7 @@ router.get('/features', [checkJwt, decodeUserInfo], async (req: Request, res: Re
 
     return res.json({ features });
   } catch (error) {
+    console.error('Error getting tenant features:', error);
     return res.status(500).json({ error: 'Failed to get tenant features' });
   }
 });
@@ -73,6 +75,7 @@ router.get('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: Re
 
     return res.json(req.tenant.branding || {});
   } catch (error) {
+    console.error('Error getting tenant branding:', error);
     return res.status(500).json({ error: 'Failed to get tenant branding' });
   }
 });
@@ -118,23 +121,28 @@ router.patch('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: 
     const brandingData = brandingSchema.parse(req.body);
 
     // Update tenant branding
-    await prisma.tenant.update({
-      where: { id: req.tenant.id },
-      data: {
+    const { error } = await supabase
+      .from('tenants')
+      .update({
         branding: brandingData
-      }
-    });
+      })
+      .eq('id', req.tenant.id);
+
+    if (error) {
+      throw error;
+    }
 
     return res.json({ message: 'Branding updated successfully' });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid branding data', details: error.errors });
     }
+    console.error('Error updating tenant branding:', error);
     return res.status(500).json({ error: 'Failed to update tenant branding' });
   }
 });
 
-// Logo upload endpoint
+// Logo upload endpoint using Supabase storage
 router.post('/branding/logo', [checkJwt, decodeUserInfo], upload.single('logo'), async (req: Request, res: Response) => {
   try {
     if (!req.tenant) {
@@ -153,23 +161,30 @@ router.post('/branding/logo', [checkJwt, decodeUserInfo], upload.single('logo'),
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Generate the URL for the uploaded file
-    const filename = path.basename(req.file.path);
-    const logoUrl = getUploadedFileUrl(req, filename);
+    // Upload file to Supabase storage
+    const logoUrl = await uploadToSupabase(req, req.file.path);
+    
+    if (!logoUrl) {
+      return res.status(500).json({ error: 'Failed to upload logo to storage' });
+    }
 
     // Get existing branding or create new object
     const existingBranding = req.tenant.branding || {};
     
     // Update the tenant branding with the new logo URL
-    await prisma.tenant.update({
-      where: { id: req.tenant.id },
-      data: {
+    const { error } = await supabase
+      .from('tenants')
+      .update({
         branding: {
           ...existingBranding,
           logo: logoUrl
         }
-      }
-    });
+      })
+      .eq('id', req.tenant.id);
+
+    if (error) {
+      throw error;
+    }
 
     return res.json({
       message: 'Logo uploaded successfully',
@@ -200,23 +215,30 @@ router.post('/branding/background', [checkJwt, decodeUserInfo], upload.single('b
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Generate the URL for the uploaded file
-    const filename = path.basename(req.file.path);
-    const backgroundUrl = getUploadedFileUrl(req, filename);
+    // Upload file to Supabase storage
+    const backgroundUrl = await uploadToSupabase(req, req.file.path);
+    
+    if (!backgroundUrl) {
+      return res.status(500).json({ error: 'Failed to upload background image to storage' });
+    }
 
     // Get existing branding or create new object
     const existingBranding = req.tenant.branding || {};
     
     // Update the tenant branding with the new background URL
-    await prisma.tenant.update({
-      where: { id: req.tenant.id },
-      data: {
+    const { error } = await supabase
+      .from('tenants')
+      .update({
         branding: {
           ...existingBranding,
           background: backgroundUrl
         }
-      }
-    });
+      })
+      .eq('id', req.tenant.id);
+
+    if (error) {
+      throw error;
+    }
 
     return res.json({
       message: 'Background image uploaded successfully',
@@ -247,23 +269,30 @@ router.post('/branding/hero', [checkJwt, decodeUserInfo], upload.single('hero'),
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Generate the URL for the uploaded file
-    const filename = path.basename(req.file.path);
-    const heroUrl = getUploadedFileUrl(req, filename);
+    // Upload file to Supabase storage
+    const heroUrl = await uploadToSupabase(req, req.file.path);
+    
+    if (!heroUrl) {
+      return res.status(500).json({ error: 'Failed to upload hero image to storage' });
+    }
 
     // Get existing branding or create new object
     const existingBranding = req.tenant.branding || {};
     
     // Update the tenant branding with the new hero URL
-    await prisma.tenant.update({
-      where: { id: req.tenant.id },
-      data: {
+    const { error } = await supabase
+      .from('tenants')
+      .update({
         branding: {
           ...existingBranding,
           hero: heroUrl
         }
-      }
-    });
+      })
+      .eq('id', req.tenant.id);
+
+    if (error) {
+      throw error;
+    }
 
     return res.json({
       message: 'Hero image uploaded successfully',
@@ -300,36 +329,27 @@ router.delete('/branding/:imageType', [checkJwt, decodeUserInfo], async (req: Re
     // Get existing branding
     const existingBranding = req.tenant.branding || {};
     
-    // If the image URL has a filename path, attempt to delete the file from disk
+    // If the image URL exists, attempt to delete the file from Supabase storage
     const imageUrl = existingBranding[imageType as keyof typeof existingBranding] as string;
     
     if (imageUrl && typeof imageUrl === 'string') {
-      try {
-        // Extract the filename from the URL
-        const urlObj = new URL(imageUrl);
-        const filename = path.basename(urlObj.pathname);
-        
-        // Delete the file if it exists
-        const filePath = path.join(process.cwd(), 'uploads', filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch (error) {
-        // If there's an error deleting the file, just log it and continue
-        console.error('Error deleting image file:', error);
-      }
+      await deleteFromSupabase(req, imageUrl);
     }
     
     // Update the tenant branding to remove the image
-    await prisma.tenant.update({
-      where: { id: req.tenant.id },
-      data: {
+    const { error } = await supabase
+      .from('tenants')
+      .update({
         branding: {
           ...existingBranding,
           [imageType]: null
         }
-      }
-    });
+      })
+      .eq('id', req.tenant.id);
+
+    if (error) {
+      throw error;
+    }
 
     return res.json({
       message: `${imageType} image deleted successfully`
