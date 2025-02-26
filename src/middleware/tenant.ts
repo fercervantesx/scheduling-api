@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import type { Tenant as PrismaTenant } from '@prisma/client';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 // Extend Express Request type to include tenant information
 declare global {
@@ -22,6 +25,51 @@ declare global {
     }
   }
 }
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    // NOTE: In production, use a cloud storage solution like AWS S3 or Google Cloud Storage
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    const tenantId = req.tenant?.id || 'unknown';
+    cb(null, `tenant-${tenantId}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+// Create multer upload middleware that can be used throughout the application
+export const upload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024 * 5 }, // 5MB limit
+  fileFilter: (_req, file, cb) => {
+    // Accept only images
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed') as any);
+    }
+  }
+});
+
+// Helper function to generate the URL for an uploaded file
+export const getUploadedFileUrl = (req: Request, filename: string): string => {
+  // Get server base URL
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers.host;
+  const baseUrl = `${protocol}://${host}`;
+  
+  // Create the public URL for the uploaded file
+  const relativePath = `/uploads/${filename}`;
+  return `${baseUrl}${relativePath}`;
+};
 
 // Helper function to extract tenant from hostname, headers, or query parameters
 const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | null> => {

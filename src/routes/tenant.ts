@@ -2,43 +2,11 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { checkJwt, decodeUserInfo } from '../middleware/auth';
 import { z } from 'zod';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { upload, getUploadedFileUrl } from '../middleware/tenant';
 
 const router = Router();
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    // NOTE: In production, use a cloud storage solution like AWS S3 or Google Cloud Storage
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-    const tenantId = req.tenant?.id || 'unknown';
-    cb(null, `tenant-${tenantId}-logo-${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 1024 * 1024 * 2 }, // 2MB limit
-  fileFilter: (_req, file, cb) => {
-    // Accept only images
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed') as any);
-    }
-  }
-});
 
 // Get tenant plan information
 router.get('/plan', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
@@ -116,8 +84,20 @@ const brandingSchema = z.object({
     z.string().max(0),  // Empty string
     z.null()
   ]).optional(),
+  background: z.union([
+    z.string().url(),
+    z.string().max(0),  // Empty string
+    z.null()
+  ]).optional(),
+  hero: z.union([
+    z.string().url(),
+    z.string().max(0),  // Empty string
+    z.null()
+  ]).optional(),
   primaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
   secondaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
+  accentColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
+  fontFamily: z.string().optional(),
 });
 
 router.patch('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
@@ -173,14 +153,9 @@ router.post('/branding/logo', [checkJwt, decodeUserInfo], upload.single('logo'),
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Get server base URL
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const host = req.headers.host;
-    const baseUrl = `${protocol}://${host}`;
-    
-    // Create the public URL for the uploaded file
-    const relativePath = `/uploads/${path.basename(req.file.path)}`;
-    const logoUrl = `${baseUrl}${relativePath}`;
+    // Generate the URL for the uploaded file
+    const filename = path.basename(req.file.path);
+    const logoUrl = getUploadedFileUrl(req, filename);
 
     // Get existing branding or create new object
     const existingBranding = req.tenant.branding || {};
@@ -203,6 +178,165 @@ router.post('/branding/logo', [checkJwt, decodeUserInfo], upload.single('logo'),
   } catch (error) {
     console.error('Error uploading logo:', error);
     return res.status(500).json({ error: 'Failed to upload logo' });
+  }
+});
+
+// Background image upload endpoint
+router.post('/branding/background', [checkJwt, decodeUserInfo], upload.single('background'), async (req: Request, res: Response) => {
+  try {
+    if (!req.tenant) {
+      return res.status(400).json({ error: 'Tenant context required' });
+    }
+
+    // Get tenant features
+    const featuresObject = req.tenant.features as Record<string, boolean>;
+    const hasCustomBranding = featuresObject.customBranding === true;
+
+    if (!hasCustomBranding) {
+      return res.status(403).json({ error: 'Custom branding not available on current plan' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Generate the URL for the uploaded file
+    const filename = path.basename(req.file.path);
+    const backgroundUrl = getUploadedFileUrl(req, filename);
+
+    // Get existing branding or create new object
+    const existingBranding = req.tenant.branding || {};
+    
+    // Update the tenant branding with the new background URL
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: {
+        branding: {
+          ...existingBranding,
+          background: backgroundUrl
+        }
+      }
+    });
+
+    return res.json({
+      message: 'Background image uploaded successfully',
+      background: backgroundUrl
+    });
+  } catch (error) {
+    console.error('Error uploading background image:', error);
+    return res.status(500).json({ error: 'Failed to upload background image' });
+  }
+});
+
+// Hero image upload endpoint
+router.post('/branding/hero', [checkJwt, decodeUserInfo], upload.single('hero'), async (req: Request, res: Response) => {
+  try {
+    if (!req.tenant) {
+      return res.status(400).json({ error: 'Tenant context required' });
+    }
+
+    // Get tenant features
+    const featuresObject = req.tenant.features as Record<string, boolean>;
+    const hasCustomBranding = featuresObject.customBranding === true;
+
+    if (!hasCustomBranding) {
+      return res.status(403).json({ error: 'Custom branding not available on current plan' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Generate the URL for the uploaded file
+    const filename = path.basename(req.file.path);
+    const heroUrl = getUploadedFileUrl(req, filename);
+
+    // Get existing branding or create new object
+    const existingBranding = req.tenant.branding || {};
+    
+    // Update the tenant branding with the new hero URL
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: {
+        branding: {
+          ...existingBranding,
+          hero: heroUrl
+        }
+      }
+    });
+
+    return res.json({
+      message: 'Hero image uploaded successfully',
+      hero: heroUrl
+    });
+  } catch (error) {
+    console.error('Error uploading hero image:', error);
+    return res.status(500).json({ error: 'Failed to upload hero image' });
+  }
+});
+
+// Delete branding image endpoint
+router.delete('/branding/:imageType', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
+  try {
+    if (!req.tenant) {
+      return res.status(400).json({ error: 'Tenant context required' });
+    }
+
+    // Get tenant features
+    const featuresObject = req.tenant.features as Record<string, boolean>;
+    const hasCustomBranding = featuresObject.customBranding === true;
+
+    if (!hasCustomBranding) {
+      return res.status(403).json({ error: 'Custom branding not available on current plan' });
+    }
+
+    const { imageType } = req.params;
+    
+    // Make sure the requested image type is valid
+    if (!['logo', 'background', 'hero'].includes(imageType)) {
+      return res.status(400).json({ error: 'Invalid image type' });
+    }
+
+    // Get existing branding
+    const existingBranding = req.tenant.branding || {};
+    
+    // If the image URL has a filename path, attempt to delete the file from disk
+    const imageUrl = existingBranding[imageType as keyof typeof existingBranding] as string;
+    
+    if (imageUrl && typeof imageUrl === 'string') {
+      try {
+        // Extract the filename from the URL
+        const urlObj = new URL(imageUrl);
+        const filename = path.basename(urlObj.pathname);
+        
+        // Delete the file if it exists
+        const filePath = path.join(process.cwd(), 'uploads', filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (error) {
+        // If there's an error deleting the file, just log it and continue
+        console.error('Error deleting image file:', error);
+      }
+    }
+    
+    // Update the tenant branding to remove the image
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: {
+        branding: {
+          ...existingBranding,
+          [imageType]: null
+        }
+      }
+    });
+
+    return res.json({
+      message: `${imageType} image deleted successfully`
+    });
+  } catch (error) {
+    console.error(`Error deleting ${req.params.imageType} image:`, error);
+    return res.status(500).json({ error: `Failed to delete ${req.params.imageType} image` });
   }
 });
 
