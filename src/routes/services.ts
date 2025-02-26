@@ -63,6 +63,32 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Update a service
+router.patch('/:id', checkJwt, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, duration, price } = req.body;
+
+  try {
+    // Prepare the update data
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (duration !== undefined) updateData.duration = duration;
+    if (price !== undefined) updateData.price = parseFloat(price);
+
+    const service = await prisma.service.update({
+      where: { 
+        id,
+        tenantId: req.tenant?.id
+      },
+      data: updateData,
+    });
+
+    return res.json(service);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update service' });
+  }
+});
+
 // Delete a service and cancel related appointments
 router.delete('/:id', checkJwt, async (req: Request, res: Response) => {
   const { id } = req.params;

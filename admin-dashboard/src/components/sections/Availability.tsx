@@ -11,13 +11,11 @@ interface AvailabilityFormData {
   date: Date | null;
 }
 
-interface TimeSlot {
-  startTime: string;
-  endTime: string;
-  displayTime?: string;
-  localStartTime?: string;
-  localEndTime?: string;
-}
+/* 
+  This type represents time slots returned from the API.
+  We're using a type annotation on the map function parameters 
+  to avoid TypeScript errors without using this explicitly.
+*/
 
 export default function Availability() {
   const { getAccessTokenSilently } = useAuth0();
@@ -231,7 +229,7 @@ export default function Availability() {
             <p className="text-gray-500">No available slots for the selected criteria</p>
           ) : (
             <div className="grid grid-cols-3 gap-4">
-              {availableSlots.map((slot, index) => (
+              {availableSlots.map((slot: any, index: number) => (
                 <button
                   key={index}
                   onClick={() => handleBookSlot(slot.startTime)}

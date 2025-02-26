@@ -22,6 +22,10 @@ enum ModalMode {
   EDIT
 }
 
+// Sorting types
+type SortField = 'name' | 'address' | 'createdAt';
+type SortDirection = 'asc' | 'desc';
+
 export default function Locations() {
   const { getAccessTokenSilently } = useAuth0();
   const queryClient = useQueryClient();
@@ -32,6 +36,11 @@ export default function Locations() {
     name: '',
     address: '',
   });
+  
+  // Add sorting state
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations'],
@@ -150,6 +159,56 @@ export default function Locations() {
     setFormData({ name: '', address: '' });
     setIsModalOpen(true);
   };
+  
+  // Sorting and filtering functions
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      // Toggle direction if clicking the same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Filter locations by search query
+  const filteredLocations = locations.filter((location: Location) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      location.name.toLowerCase().includes(query) ||
+      location.address.toLowerCase().includes(query)
+    );
+  });
+
+  // Sort locations
+  const sortedLocations = [...filteredLocations].sort((a: Location, b: Location) => {
+    let compareA, compareB;
+    
+    // Extract the right field for comparison
+    switch (sortField) {
+      case 'name':
+        compareA = a.name;
+        compareB = b.name;
+        break;
+      case 'address':
+        compareA = a.address;
+        compareB = b.address;
+        break;
+      case 'createdAt':
+        compareA = new Date(a.createdAt).getTime();
+        compareB = new Date(b.createdAt).getTime();
+        break;
+      default:
+        compareA = a.name;
+        compareB = b.name;
+    }
+    
+    if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+    if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -166,19 +225,61 @@ export default function Locations() {
           Add Location
         </button>
       </div>
+      
+      {/* Search Controls */}
+      <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
+        <div className="flex justify-between items-center">
+          <div className="w-1/3">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search locations..."
+              className="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+            />
+          </div>
+          <div className="text-sm text-gray-500">
+            {filteredLocations.length} location{filteredLocations.length !== 1 ? 's' : ''} found
+          </div>
+        </div>
+      </div>
 
       <div className="border-t border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('name')}
+              >
+                Name
+                {sortField === 'name' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('address')}
+              >
+                Address
+                {sortField === 'address' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('createdAt')}
+              >
+                Created At
+                {sortField === 'createdAt' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {locations.map((location: Location) => (
+            {sortedLocations.map((location: Location) => (
               <tr key={location.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{location.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{location.address}</td>

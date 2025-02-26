@@ -202,7 +202,7 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
     }
 
     // Check tenant status
-    if (tenant.status !== 'ACTIVE') {
+    if (tenant.status !== 'ACTIVE' && tenant.status !== 'TRIAL') {
       res.status(403).json({ 
         error: 'Tenant access denied',
         status: tenant.status
@@ -211,7 +211,7 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
     }
 
     // Check if trial has expired
-    if (tenant.trialEndsAt && tenant.trialEndsAt < new Date()) {
+    if (tenant.status === 'TRIAL' && tenant.trialEndsAt && tenant.trialEndsAt < new Date()) {
       res.status(402).json({ 
         error: 'Trial period has expired',
         trialEndDate: tenant.trialEndsAt
@@ -281,6 +281,16 @@ export const checkFeatureAccess = (featureName: string) => {
     }
     
     if (!req.tenant) {
+      next();
+      return;
+    }
+
+    // Allow access to all features for ADMIN in dev environment
+    if (process.env.NODE_ENV === 'development' && 
+        req.user && 
+        req.user.permissions && 
+        Array.isArray(req.user.permissions) && 
+        req.user.permissions.includes('admin')) {
       next();
       return;
     }

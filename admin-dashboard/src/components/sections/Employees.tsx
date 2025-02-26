@@ -5,8 +5,20 @@ import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
 interface EmployeeFormData {
+  id?: string;
   name: string;
   locationIds: string[];
+  isEditing: boolean;
+}
+
+// Sorting types
+type SortField = 'name' | 'locations';
+type SortDirection = 'asc' | 'desc';
+
+// Filter types
+interface FilterState {
+  locationId: string;
+  searchQuery: string;
 }
 
 export default function Employees() {
@@ -16,6 +28,15 @@ export default function Employees() {
   const [formData, setFormData] = useState<EmployeeFormData>({
     name: '',
     locationIds: [],
+    isEditing: false,
+  });
+  
+  // Add sorting and filtering state
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filters, setFilters] = useState<FilterState>({
+    locationId: '',
+    searchQuery: '',
   });
 
   const { data: employees = [], isLoading: isLoadingEmployees } = useQuery({
@@ -51,11 +72,40 @@ export default function Employees() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       setIsModalOpen(false);
-      setFormData({ name: '', locationIds: [] });
+      setFormData({ name: '', locationIds: [], isEditing: false });
       toast.success('Employee created successfully');
     },
     onError: () => {
       toast.error('Failed to create employee');
+    },
+  });
+
+  const updateEmployee = useMutation({
+    mutationFn: async (data: EmployeeFormData) => {
+      const token = await getAccessTokenSilently();
+      
+      // First update the employee name
+      await api.patch(`/employees/${data.id}`, 
+        { name: data.name }, 
+        { headers: { Authorization: `Bearer ${token}` }}
+      );
+      
+      // Then update locations
+      const locationsResponse = await api.patch(`/employees/${data.id}/locations`, 
+        { locationIds: data.locationIds }, 
+        { headers: { Authorization: `Bearer ${token}` }}
+      );
+      
+      return locationsResponse.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      setIsModalOpen(false);
+      setFormData({ name: '', locationIds: [], isEditing: false });
+      toast.success('Employee updated successfully');
+    },
+    onError: () => {
+      toast.error('Failed to update employee');
     },
   });
 
@@ -82,7 +132,26 @@ export default function Employees() {
       toast.error('Please fill in all fields');
       return;
     }
-    createEmployee.mutate(formData);
+    
+    if (formData.isEditing && formData.id) {
+      updateEmployee.mutate(formData);
+    } else {
+      createEmployee.mutate(formData);
+    }
+  };
+  
+  const handleEdit = (employee: any) => {
+    // Extract location IDs from the employee object
+    const locationIds = employee.locations.map((loc: any) => loc.location.id);
+    
+    setFormData({
+      id: employee.id,
+      name: employee.name,
+      locationIds,
+      isEditing: true
+    });
+    
+    setIsModalOpen(true);
   };
 
   const handleLocationChange = (locationId: string) => {
@@ -93,6 +162,74 @@ export default function Employees() {
       return { ...prev, locationIds: newLocationIds };
     });
   };
+  
+  // Sorting and filtering functions
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      // Toggle direction if clicking the same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Filter employees by location and search query
+  const filteredEmployees = employees.filter((employee: any) => {
+    // Filter by search query
+    if (filters.searchQuery) {
+      const query = filters.searchQuery.toLowerCase();
+      if (!employee.name.toLowerCase().includes(query)) {
+        return false;
+      }
+    }
+    
+    // Filter by location
+    if (filters.locationId) {
+      const hasLocation = employee.locations.some((loc: any) => 
+        loc.location.id === filters.locationId
+      );
+      if (!hasLocation) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+  
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      locationId: '',
+      searchQuery: '',
+    });
+  };
+  
+  // Sort employees
+  const sortedEmployees = [...filteredEmployees].sort((a: any, b: any) => {
+    let compareA, compareB;
+    
+    // Extract the right field for comparison
+    switch (sortField) {
+      case 'name':
+        compareA = a.name;
+        compareB = b.name;
+        break;
+      case 'locations':
+        // Sort by number of locations
+        compareA = a.locations.length;
+        compareB = b.locations.length;
+        break;
+      default:
+        compareA = a.name;
+        compareB = b.name;
+    }
+    
+    if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+    if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   if (isLoadingEmployees) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -103,24 +240,88 @@ export default function Employees() {
       <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-900">Employees</h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setFormData({ name: '', locationIds: [], isEditing: false });
+            setIsModalOpen(true);
+          }}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Add Employee
         </button>
+      </div>
+      
+      {/* Filter Controls */}
+      <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="w-1/3">
+            <input
+              type="text"
+              value={filters.searchQuery}
+              onChange={(e) => setFilters({...filters, searchQuery: e.target.value})}
+              placeholder="Search employees..."
+              className="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+            />
+          </div>
+          
+          <div>
+            <select
+              value={filters.locationId}
+              onChange={(e) => setFilters({...filters, locationId: e.target.value})}
+              className="mt-1 block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            >
+              <option value="">All Locations</option>
+              {locations.map((location: any) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {(filters.searchQuery || filters.locationId) && (
+            <button
+              onClick={resetFilters}
+              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Reset
+            </button>
+          )}
+          
+          <div className="ml-auto">
+            <p className="text-sm text-gray-500">
+              {filteredEmployees.length} employee{filteredEmployees.length !== 1 ? 's' : ''} found
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="border-t border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Locations</th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('name')}
+              >
+                Name
+                {sortField === 'name' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('locations')}
+              >
+                Locations
+                {sortField === 'locations' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {employees.map((employee: any) => (
+            {sortedEmployees.map((employee: any) => (
               <tr key={employee.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -136,16 +337,24 @@ export default function Employees() {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <button
-                    className="text-red-600 hover:text-red-900"
-                    onClick={() => {
-                      if (window.confirm('Are you sure? This will cancel all associated appointments.')) {
-                        deleteEmployee.mutate(employee.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex space-x-4">
+                    <button
+                      className="text-blue-600 hover:text-blue-900"
+                      onClick={() => handleEdit(employee)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => {
+                        if (window.confirm('Are you sure? This will cancel all associated appointments.')) {
+                          deleteEmployee.mutate(employee.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -166,6 +375,9 @@ export default function Employees() {
             {/* Modal panel */}
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {formData.isEditing ? 'Edit Employee' : 'Add New Employee'}
+                </h3>
                 <div className="mb-4">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                     Name
@@ -203,9 +415,11 @@ export default function Employees() {
                   <button
                     type="submit"
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm"
-                    disabled={createEmployee.isPending}
+                    disabled={createEmployee.isPending || updateEmployee.isPending}
                   >
-                    {createEmployee.isPending ? 'Creating...' : 'Create'}
+                    {formData.isEditing 
+                      ? (updateEmployee.isPending ? 'Updating...' : 'Update') 
+                      : (createEmployee.isPending ? 'Creating...' : 'Create')}
                   </button>
                   <button
                     type="button"

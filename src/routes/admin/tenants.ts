@@ -51,14 +51,30 @@ router.patch('/:id/settings', [checkJwt, requireAdmin], async (req: Request, res
   const { settings } = req.body;
 
   try {
+    // Fetch existing settings first
+    const currentTenant = await prisma.tenant.findUnique({
+      where: { id },
+      select: { settings: true },
+    });
+
+    // Merge existing settings with new ones
+    const existingSettings = currentTenant?.settings ? 
+      (typeof currentTenant.settings === 'object' ? currentTenant.settings : {}) : {};
+      
+    const mergedSettings = {
+      ...existingSettings,
+      ...settings,
+    };
+
     const tenant = await prisma.tenant.update({
       where: { id },
       data: {
-        settings: settings as Prisma.InputJsonValue,
+        settings: mergedSettings as Prisma.InputJsonValue,
       },
     });
     return res.json(tenant);
   } catch (error) {
+    console.error('Failed to update tenant settings:', error);
     return res.status(500).json({ error: 'Failed to update tenant settings' });
   }
 });

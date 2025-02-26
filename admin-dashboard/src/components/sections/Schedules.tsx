@@ -27,6 +27,9 @@ const WEEKDAYS = [
   { value: 'SUNDAY', label: 'Sunday' },
 ];
 
+type SortField = 'employee' | 'location' | 'weekday' | 'startTime' | 'endTime' | 'blockType';
+type SortDirection = 'asc' | 'desc';
+
 export default function Schedules() {
   const { getAccessTokenSilently } = useAuth0();
   const queryClient = useQueryClient();
@@ -37,6 +40,11 @@ export default function Schedules() {
     schedules: [],
     blockType: 'WORKING_HOURS',
   });
+  
+  // Add sorting and filtering state
+  const [sortField, setSortField] = useState<SortField>('employee');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [employeeFilter, setEmployeeFilter] = useState<string>('');
 
   const { data: schedules = [], isLoading: isLoadingSchedules, error: _schedulesError } = useQuery({
     queryKey: ['schedules'],
@@ -189,6 +197,79 @@ export default function Schedules() {
       )
     : employees;
 
+  // Sorting function
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      // Toggle direction if clicking the same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Get all unique employees for the filter
+  const uniqueEmployees: Array<{id: string, name: string}> = Array.from(new Set(schedules.map((s: any) => s.employeeId)))
+    .map((employeeId) => {
+      const schedule = schedules.find((s: any) => s.employeeId === employeeId);
+      return {
+        id: employeeId as string,
+        name: schedule?.employee?.name || 'Unknown Employee'
+      };
+    });
+
+  // Filtering function
+  const filteredSchedules = schedules.filter((schedule: any) => {
+    if (!employeeFilter) return true;
+    return schedule.employeeId === employeeFilter;
+  });
+
+  // Sorting function
+  const sortedSchedules = [...filteredSchedules].sort((a: any, b: any) => {
+    let compareA, compareB;
+    
+    // Extract the right field for comparison
+    switch (sortField) {
+      case 'employee':
+        compareA = a.employee.name;
+        compareB = b.employee.name;
+        break;
+      case 'location':
+        compareA = a.location.name;
+        compareB = b.location.name;
+        break;
+      case 'weekday':
+        // Custom order for weekdays
+        const weekdayOrder: Record<string, number> = { 
+          'MONDAY': 1, 'TUESDAY': 2, 'WEDNESDAY': 3, 'THURSDAY': 4, 
+          'FRIDAY': 5, 'SATURDAY': 6, 'SUNDAY': 7 
+        };
+        compareA = weekdayOrder[a.weekday as string] || 0;
+        compareB = weekdayOrder[b.weekday as string] || 0;
+        break;
+      case 'startTime':
+        compareA = a.startTime;
+        compareB = b.startTime;
+        break;
+      case 'endTime':
+        compareA = a.endTime;
+        compareB = b.endTime;
+        break;
+      case 'blockType':
+        compareA = a.blockType;
+        compareB = b.blockType;
+        break;
+      default:
+        compareA = a.employee.name;
+        compareB = b.employee.name;
+    }
+    
+    if (compareA < compareB) return sortDirection === 'asc' ? -1 : 1;
+    if (compareA > compareB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   if (isLoadingSchedules) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -204,22 +285,100 @@ export default function Schedules() {
           Add Schedule
         </button>
       </div>
+      
+      {/* Filter Controls */}
+      <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div>
+            <label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">
+              Filter by Employee
+            </label>
+            <select
+              id="employeeFilter"
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+            >
+              <option value="">All Employees</option>
+              {uniqueEmployees.map((employee: {id: string, name: string}) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="ml-auto">
+            <p className="text-sm text-gray-500">
+              {filteredSchedules.length} schedule{filteredSchedules.length !== 1 ? 's' : ''} found
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="border-t border-gray-200">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weekday</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Time</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Time</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('employee')}
+              >
+                Employee
+                {sortField === 'employee' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('location')}
+              >
+                Location
+                {sortField === 'location' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('weekday')}
+              >
+                Weekday
+                {sortField === 'weekday' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('startTime')}
+              >
+                Start Time
+                {sortField === 'startTime' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('endTime')}
+              >
+                End Time
+                {sortField === 'endTime' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('blockType')}
+              >
+                Type
+                {sortField === 'blockType' && (
+                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {schedules.map((schedule: any) => (
+            {sortedSchedules.map((schedule: any) => (
               <tr key={schedule.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.employee.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.location.name}</td>

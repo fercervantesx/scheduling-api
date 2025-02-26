@@ -5,9 +5,11 @@ import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
 interface ServiceFormData {
+  id?: string;
   name: string;
   duration: number;
   price?: number;
+  isEditing: boolean;
 }
 
 export default function Services() {
@@ -18,6 +20,7 @@ export default function Services() {
     name: '',
     duration: 30,
     price: undefined,
+    isEditing: false,
   });
 
   const { data: services = [], isLoading } = useQuery({
@@ -42,11 +45,37 @@ export default function Services() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['services'] });
       setIsModalOpen(false);
-      setFormData({ name: '', duration: 30, price: undefined });
+      setFormData({ name: '', duration: 30, price: undefined, isEditing: false });
       toast.success('Service created successfully');
     },
     onError: () => {
       toast.error('Failed to create service');
+    },
+  });
+
+  const updateService = useMutation({
+    mutationFn: async (data: ServiceFormData) => {
+      const token = await getAccessTokenSilently();
+      const response = await api.patch(`/services/${data.id}`, 
+        {
+          name: data.name,
+          duration: data.duration,
+          price: data.price
+        }, 
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['services'] });
+      setIsModalOpen(false);
+      setFormData({ name: '', duration: 30, price: undefined, isEditing: false });
+      toast.success('Service updated successfully');
+    },
+    onError: () => {
+      toast.error('Failed to update service');
     },
   });
 
@@ -73,7 +102,24 @@ export default function Services() {
       toast.error('Please fill in all fields');
       return;
     }
-    createService.mutate(formData);
+    
+    if (formData.isEditing && formData.id) {
+      updateService.mutate(formData);
+    } else {
+      createService.mutate(formData);
+    }
+  };
+  
+  const handleEdit = (service: any) => {
+    setFormData({
+      id: service.id,
+      name: service.name,
+      duration: service.duration,
+      price: service.price,
+      isEditing: true
+    });
+    
+    setIsModalOpen(true);
   };
 
   if (isLoading) {
@@ -85,7 +131,15 @@ export default function Services() {
       <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-900">Services</h2>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setFormData({
+              name: '',
+              duration: 30,
+              price: undefined,
+              isEditing: false
+            });
+            setIsModalOpen(true);
+          }}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Add Service
@@ -111,16 +165,24 @@ export default function Services() {
                   {service.price ? `$${service.price.toFixed(2)}` : 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <button
-                    className="text-red-600 hover:text-red-900"
-                    onClick={() => {
-                      if (window.confirm('Are you sure? This will affect availability calculations.')) {
-                        deleteService.mutate(service.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <div className="flex space-x-4">
+                    <button
+                      className="text-blue-600 hover:text-blue-900"
+                      onClick={() => handleEdit(service)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-red-600 hover:text-red-900"
+                      onClick={() => {
+                        if (window.confirm('Are you sure? This will affect availability calculations.')) {
+                          deleteService.mutate(service.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -141,6 +203,9 @@ export default function Services() {
             {/* Modal panel */}
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <form onSubmit={handleSubmit} className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {formData.isEditing ? 'Edit Service' : 'Add New Service'}
+                </h3>
                 <div className="mb-4">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                     Name
@@ -198,9 +263,11 @@ export default function Services() {
                   <button
                     type="submit"
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm"
-                    disabled={createService.isPending}
+                    disabled={createService.isPending || updateService.isPending}
                   >
-                    {createService.isPending ? 'Creating...' : 'Create'}
+                    {formData.isEditing 
+                      ? (updateService.isPending ? 'Updating...' : 'Update') 
+                      : (createService.isPending ? 'Creating...' : 'Create')}
                   </button>
                   <button
                     type="button"

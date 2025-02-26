@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export type PlanId = 'FREE' | 'BASIC' | 'PRO';
-export type FeatureKey = 'customBranding' | 'apiAccess' | 'webhooks' | 'multipleLocations' | 'analytics';
+export type FeatureKey = 'customBranding' | 'apiAccess' | 'webhooks' | 'multipleLocations' | 'analytics' | 'paymentProcessing';
 
 export const PLANS: Record<PlanId, {
   name: string;
@@ -34,6 +34,7 @@ export const PLANS: Record<PlanId, {
       webhooks: false,
       multipleLocations: false,
       analytics: false,
+      paymentProcessing: false,
     },
     trialDays: 14,
   },
@@ -54,6 +55,7 @@ export const PLANS: Record<PlanId, {
       webhooks: false,
       multipleLocations: true,
       analytics: false,
+      paymentProcessing: true,
     },
     trialDays: 14,
   },
@@ -74,6 +76,7 @@ export const PLANS: Record<PlanId, {
       webhooks: true,
       multipleLocations: true,
       analytics: true,
+      paymentProcessing: true,
     },
     trialDays: 14,
   },
@@ -96,6 +99,7 @@ export const featureSchema = z.object({
   webhooks: z.boolean(),
   multipleLocations: z.boolean(),
   analytics: z.boolean(),
+  paymentProcessing: z.boolean(),
 });
 
 export type FeatureFlags = z.infer<typeof featureSchema>;

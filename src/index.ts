@@ -5,6 +5,7 @@ import availabilityRoutes from './routes/availability';
 import serviceRoutes from './routes/services';
 import employeeRoutes from './routes/employees';
 import scheduleRoutes from './routes/schedules';
+import analyticsRoutes from './routes/analytics';
 import { checkJwt } from './middleware/auth';
 import app from './app'; // Import the app from app.ts
 
@@ -23,6 +24,7 @@ app.use('/api/availability', checkJwt, availabilityRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/schedules', scheduleRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Add error handler for auth errors
 app.use((err: any, _req: any, res: any, next: any): void => {

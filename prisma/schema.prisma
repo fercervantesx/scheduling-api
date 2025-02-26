@@ -10,32 +10,32 @@ generator client {
 
 // New Tenant-related models
 model Tenant {
-  id            String       @id @default(uuid()) @db.Uuid
-  name          String
-  email         String?     // Added email field
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  email             String? // Added email field
   notificationEmail String? // Email for system notifications
-  subdomain     String       @unique
-  customDomain  String?      @unique
-  status        String       @default("TRIAL")
-  plan          String       @default("FREE")
-  trialEndsAt   DateTime?
-  settings      Json?        // Store tenant-specific settings
-  branding      Json?        // Store branding configuration
-  features      Json
-  apiKey        String?      @unique // For API access
-  webhookUrl    String?      // For webhook notifications
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  subdomain         String    @unique
+  customDomain      String?   @unique
+  status            String    @default("TRIAL")
+  plan              String    @default("FREE")
+  trialEndsAt       DateTime?
+  settings          Json? // Store tenant-specific settings
+  branding          Json? // Store branding configuration
+  features          Json
+  apiKey            String?   @unique // For API access
+  webhookUrl        String? // For webhook notifications
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Tenant relationships
-  locations     Location[]
-  employees     Employee[]
-  services      Service[]
-  schedules     Schedule[]
-  appointments  Appointment[]
-  apiKeys       ApiKey[]
-  webhooks      Webhook[]
-  users         User[]
+  locations    Location[]
+  employees    Employee[]
+  services     Service[]
+  schedules    Schedule[]
+  appointments Appointment[]
+  apiKeys      ApiKey[]
+  webhooks     Webhook[]
+  users        User[]
 
   @@index([subdomain])
   @@index([customDomain])
@@ -43,95 +43,95 @@ model Tenant {
 }
 
 model User {
-  id            String    @id @default(uuid()) @db.Uuid
-  email         String
-  name          String?
-  role          String    // e.g., 'ADMIN', 'STAFF', 'CLIENT'
-  tenantId      String    @db.Uuid
-  tenant        Tenant    @relation(fields: [tenantId], references: [id])
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  name      String?
+  role      String // e.g., 'ADMIN', 'STAFF', 'CLIENT'
+  tenantId  String   @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([email, tenantId])
   @@index([tenantId])
 }
 
 model ApiKey {
-  id          String    @id @default(uuid()) @db.Uuid
-  key         String    @unique
-  name        String
-  tenantId    String    @db.Uuid
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String    @id @default(uuid()) @db.Uuid
+  key       String    @unique
+  name      String
+  tenantId  String    @db.Uuid
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([tenantId])
 }
 
 model Webhook {
-  id          String    @id @default(uuid()) @db.Uuid
-  url         String
-  events      String[]  // Array of event types to subscribe to
-  tenantId    String    @db.Uuid
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(uuid()) @db.Uuid
+  url       String
+  events    String[] // Array of event types to subscribe to
+  tenantId  String   @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
 }
 
 // Modified existing models to support multi-tenancy
 model Location {
-  id          String       @id @default(uuid()) @db.Uuid
-  tenantId    String      @db.Uuid
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  name        String
-  address     String
-  employees   EmployeeLocation[]
-  schedules   Schedule[]
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @db.Uuid
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  name         String
+  address      String
+  employees    EmployeeLocation[]
+  schedules    Schedule[]
   appointments Appointment[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@index([tenantId])
 }
 
 model Service {
-  id          String       @id @default(uuid()) @db.Uuid
-  tenantId    String      @db.Uuid
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  name        String
-  duration    Int         // Duration in minutes
-  price       Float?      // Price of the service (optional)
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @db.Uuid
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  name         String
+  duration     Int // Duration in minutes
+  price        Float? // Price of the service (optional)
   appointments Appointment[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@index([tenantId])
 }
 
 model Employee {
-  id          String       @id @default(uuid()) @db.Uuid
-  tenantId    String      @db.Uuid
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  name        String
-  locations   EmployeeLocation[]
-  schedules   Schedule[]
+  id           String             @id @default(uuid()) @db.Uuid
+  tenantId     String             @db.Uuid
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  name         String
+  locations    EmployeeLocation[]
+  schedules    Schedule[]
   appointments Appointment[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@index([tenantId])
 }
 
 model EmployeeLocation {
-  employee    Employee    @relation(fields: [employeeId], references: [id])
-  employeeId  String      @db.Uuid
-  location    Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId  String      @db.Uuid
-  createdAt   DateTime    @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String   @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String   @db.Uuid
+  createdAt  DateTime @default(now())
 
   @@id([employeeId, locationId])
   @@index([employeeId])
@@ -139,46 +139,49 @@ model EmployeeLocation {
 }
 
 model Schedule {
-  id          String       @id @default(uuid()) @db.Uuid
-  tenantId    String      @db.Uuid
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  employee    Employee     @relation(fields: [employeeId], references: [id])
-  employeeId  String       @db.Uuid
-  location    Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId  String       @db.Uuid
-  startTime   String      // Format: "HH:mm"
-  endTime     String      // Format: "HH:mm"
-  weekday     String      // e.g., 'MONDAY', 'TUESDAY', etc.
-  blockType   String      // e.g., 'WORKING_HOURS', 'BREAK', 'VACATION', etc.
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String   @db.Uuid
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String   @db.Uuid
+  startTime  String // Format: "HH:mm"
+  endTime    String // Format: "HH:mm"
+  weekday    String // e.g., 'MONDAY', 'TUESDAY', etc.
+  blockType  String // e.g., 'WORKING_HOURS', 'BREAK', 'VACATION', etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([tenantId])
   @@index([employeeId, locationId, weekday])
 }
 
 model Appointment {
-  id            String     @id @default(uuid()) @db.Uuid
-  tenantId      String    @db.Uuid
-  tenant        Tenant    @relation(fields: [tenantId], references: [id])
-  service       Service    @relation(fields: [serviceId], references: [id])
-  serviceId     String     @db.Uuid
-  location      Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId    String     @db.Uuid
-  employee      Employee   @relation(fields: [employeeId], references: [id])
-  employeeId    String     @db.Uuid
-  startTime     DateTime
-  status        String     // e.g., 'SCHEDULED', 'COMPLETED', 'CANCELLED', etc.
-  canceledBy    String?    // e.g., 'CLIENT', 'EMPLOYEE', 'ADMIN', etc.
-  cancelReason  String?
-  bookedBy      String     // User email from JWT token
-  bookedByName  String     // User name from JWT token
-  userId        String     // Auth0 user ID
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  service         Service   @relation(fields: [serviceId], references: [id])
+  serviceId       String    @db.Uuid
+  location        Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId      String    @db.Uuid
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  employeeId      String    @db.Uuid
+  startTime       DateTime
+  status          String // e.g., 'SCHEDULED', 'COMPLETED', 'CANCELLED', 'FULFILLED', etc.
+  canceledBy      String? // e.g., 'CLIENT', 'EMPLOYEE', 'ADMIN', etc.
+  cancelReason    String?
+  fulfillmentDate DateTime? // When the appointment was marked as fulfilled
+  paymentStatus   String? // e.g., 'PAID', 'UNPAID', 'REFUNDED', etc.
+  paymentAmount   Float? // Amount paid for the appointment
+  bookedBy        String // User email from JWT token
+  bookedByName    String // User name from JWT token
+  userId          String // Auth0 user ID
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([tenantId])
   @@index([employeeId, startTime, status])
   @@index([locationId, startTime, status])
   @@index([userId, startTime])
-} 
+}

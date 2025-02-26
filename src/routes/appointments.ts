@@ -136,20 +136,78 @@ router.post('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response)
   }
 });
 
-// Update appointment status (cancel, reschedule)
+// Update appointment status (cancel, reschedule, fulfill)
 router.patch('/:id', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { status, startTime, canceledBy, cancelReason } = req.body;
+  const { 
+    status, 
+    startTime, 
+    canceledBy, 
+    cancelReason
+  } = req.body;
 
   try {
+    // Get the current tenant settings for reschedule time limit
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.tenant?.id || '' },
+      select: { settings: true }
+    });
+
+    // Default reschedule time limit - 2 hours
+    let rescheduleTimeLimit = 2;
+    
+    // Safely extract reschedule time limit from settings if it exists
+    if (tenant?.settings && typeof tenant.settings === 'object') {
+      const settings = tenant.settings as Record<string, any>;
+      if (settings.rescheduleTimeLimit !== undefined) {
+        rescheduleTimeLimit = Number(settings.rescheduleTimeLimit);
+      }
+    }
+
+    // Get the current appointment to check time constraints
+    const currentAppointment = await prisma.appointment.findUnique({
+      where: { id }
+    });
+
+    if (!currentAppointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Check if trying to reschedule
+    if (startTime && currentAppointment.status !== 'CANCELLED') {
+      const now = new Date();
+      const appointmentTime = new Date(currentAppointment.startTime);
+      const hoursUntilAppointment = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Check if within the allowed reschedule window
+      if (hoursUntilAppointment < rescheduleTimeLimit) {
+        return res.status(400).json({ 
+          error: 'Cannot reschedule appointments less than ' + 
+                 rescheduleTimeLimit + ' hours before the appointment time'
+        });
+      }
+    }
+
+    // Prepare data for update
+    const updateData: any = {
+      status,
+      canceledBy,
+      cancelReason
+    };
+
+    // Add startTime if provided
+    if (startTime) {
+      updateData.startTime = new Date(startTime);
+    }
+
+    // Add fulfillmentDate when marking as fulfilled
+    if (status === 'FULFILLED') {
+      updateData.fulfillmentDate = new Date();
+    }
+
     const appointment = await prisma.appointment.update({
       where: { id },
-      data: {
-        status,
-        startTime: startTime ? new Date(startTime) : undefined,
-        canceledBy,
-        cancelReason,
-      },
+      data: updateData,
       include: {
         service: true,
         employee: true,
@@ -159,6 +217,7 @@ router.patch('/:id', [checkJwt, decodeUserInfo], async (req: Request, res: Respo
 
     return res.json(appointment);
   } catch (error) {
+    console.error('Error updating appointment:', error);
     return res.status(500).json({ error: 'Failed to update appointment' });
   }
 });

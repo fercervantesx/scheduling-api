@@ -109,6 +109,36 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Update an employee
+router.patch('/:id', checkJwt, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  try {
+    // Update employee name
+    const employee = await prisma.employee.update({
+      where: {
+        id,
+        tenantId: req.tenant?.id,
+      },
+      data: {
+        name,
+      },
+      include: {
+        locations: {
+          include: {
+            location: true,
+          },
+        },
+      },
+    });
+
+    return res.json(employee);
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
 // Update employee locations
 router.patch('/:id/locations', checkJwt, async (req: Request, res: Response) => {
   const { id } = req.params;
