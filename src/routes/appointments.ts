@@ -56,40 +56,14 @@ router.get('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response) 
 
 // Book a new appointment with concurrency check
 router.post('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
-  // Extremely detailed debug logging
-  console.log('============ APPOINTMENT CREATE DEBUG ============');
-  console.log('Raw request body:', req.body);
-  console.log('Request headers:', req.headers);
-  console.log('Content-Type:', req.headers['content-type']);
-  console.log('Body type:', typeof req.body);
-  console.log('Is body array?', Array.isArray(req.body));
-  
-  // Check if the body might be stringified JSON
-  if (typeof req.body === 'string') {
-    try {
-      const parsedBody = JSON.parse(req.body);
-      console.log('Parsed string body:', parsedBody);
-      req.body = parsedBody;
-    } catch (e) {
-      console.log('Failed to parse body as JSON string');
-    }
-  }
-  
-  // Try extracting with both camelCase and snake_case
+  // Extract request fields (supporting both camelCase and snake_case)
   const serviceId = req.body.serviceId || req.body.service_id;
   const locationId = req.body.locationId || req.body.location_id;
   const employeeId = req.body.employeeId || req.body.employee_id;
   const startTime = req.body.startTime || req.body.start_time;
 
-  console.log('Extracted appointment fields:', { serviceId, locationId, employeeId, startTime });
-
   if (!serviceId || !locationId || !employeeId || !startTime) {
-    return res.status(400).json({ 
-      error: 'Missing required fields',
-      received: { serviceId, locationId, employeeId, startTime },
-      rawBody: typeof req.body === 'object' ? JSON.stringify(req.body) : req.body,
-      bodyKeys: typeof req.body === 'object' ? Object.keys(req.body) : []
-    });
+    return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
@@ -102,26 +76,10 @@ router.post('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response)
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    // Log JWT token information
-    console.log('JWT User Info:', {
-      email: req.user?.email,
-      name: req.user?.name,
-      nickname: req.user?.nickname,
-      sub: req.user?.sub,
-      raw: req.user
-    });
-
     // Extract user information from JWT token
     const userEmail = req.user?.email || 'unknown';
     const userName = req.user?.name || req.user?.nickname || userEmail.split('@')[0];
     const userId = req.user?.sub || 'unknown';
-
-    // Log extracted user information
-    console.log('Extracted User Info:', {
-      userEmail,
-      userName,
-      userId
-    });
 
     const appointmentEndTime = new Date(new Date(startTime).getTime() + service.duration * 60000);
 

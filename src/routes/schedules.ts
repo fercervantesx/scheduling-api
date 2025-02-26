@@ -7,8 +7,6 @@ const router = Router();
 // List all schedules
 router.get('/', async (req: Request, res: Response) => {
   try {
-    console.log('Fetching schedules for tenant:', req.tenant?.id);
-    
     const schedules = await prisma.schedule.findMany({
       where: {
         tenantId: req.tenant?.id,
@@ -22,8 +20,6 @@ router.get('/', async (req: Request, res: Response) => {
         { startTime: 'asc' }
       ],
     });
-    
-    console.log(`Found ${schedules.length} schedules for tenant ${req.tenant?.id}`);
     return res.json(schedules);
   } catch (error) {
     console.error('Failed to fetch schedules:', error);

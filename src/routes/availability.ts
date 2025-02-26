@@ -33,14 +33,6 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     const dayIndex = localDate.getDay(); // Use local day
     const weekday = WEEKDAYS[dayIndex];
 
-    console.log('Date debugging:', {
-      inputDate: date,
-      parsedDate: localDate.toISOString(),
-      dayIndex,
-      weekday,
-      fullWeekdays: WEEKDAYS,
-    });
-
     // Get employee schedule for the weekday
     const schedule = await prisma.schedule.findFirst({
       where: {
@@ -51,14 +43,6 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       },
     });
 
-    console.log('Schedule lookup:', {
-      weekday,
-      employeeId,
-      locationId,
-      found: !!schedule,
-      schedule,
-    });
-
     if (!schedule) {
       return res.status(404).json({ error: 'No schedule found for this day' });
     }
@@ -66,11 +50,9 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     // Create date boundaries in local time
     const startOfDay = new Date(localDate);
     startOfDay.setHours(0, 0, 0, 0);
-    console.log('Start of day (local):', startOfDay.toISOString());
     
     const endOfDay = new Date(localDate);
     endOfDay.setHours(23, 59, 59, 999);
-    console.log('End of day (local):', endOfDay.toISOString());
 
     // Get all appointments for the employee in the date range
     const appointments = await prisma.appointment.findMany({
@@ -101,11 +83,9 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
     // Create schedule boundaries in local time first
     const scheduleStart = new Date(localDate);
     scheduleStart.setHours(scheduleStartHour, scheduleStartMinute, 0, 0);
-    console.log('Schedule start (local):', scheduleStart.toISOString(), 'Original:', schedule.startTime);
     
     const scheduleEnd = new Date(localDate);
     scheduleEnd.setHours(scheduleEndHour, scheduleEndMinute, 0, 0);
-    console.log('Schedule end (local):', scheduleEnd.toISOString(), 'Original:', schedule.endTime);
 
     // Calculate available slots
     const slots: { 
@@ -160,12 +140,7 @@ router.get('/', checkJwt, async (req: Request, res: Response) => {
       currentTime = new Date(currentTime.getTime() + 30 * 60 * 1000);
     }
 
-    console.log(`Generated ${slots.length} available slots with timezone information`);
-    
-    // Log a sample slot for debugging
-    if (slots.length > 0) {
-      console.log('Sample slot:', slots[0]);
-    }
+    // Generated slots ready to return
     
     return res.json({
       slots,
