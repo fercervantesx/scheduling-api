@@ -87,7 +87,34 @@ export const checkQuota = (options: QuotaOptions) => {
         }
 
         case 'storageGB':
-          // TODO: Implement storage quota check
+          // Calculate storage usage by estimating based on database records
+          // This is an estimation based on database records, not actual file sizes
+          const storageRecords = await Promise.all([
+            prisma.appointment.count({ where: { tenantId: req.tenant.id } }),
+            prisma.service.count({ where: { tenantId: req.tenant.id } }),
+            prisma.employee.count({ where: { tenantId: req.tenant.id } }),
+            prisma.location.count({ where: { tenantId: req.tenant.id } }),
+            prisma.schedule.count({ where: { tenantId: req.tenant.id } })
+          ]);
+          
+          // Estimate storage usage based on record counts (approximate values in KB)
+          const recordSizes = {
+            appointment: 5, // 5KB per appointment
+            service: 2,     // 2KB per service
+            employee: 3,    // 3KB per employee
+            location: 3,    // 3KB per location
+            schedule: 2     // 2KB per schedule
+          };
+          
+          // Calculate total storage in KB, then convert to GB
+          const totalStorageKB = 
+            storageRecords[0] * recordSizes.appointment +
+            storageRecords[1] * recordSizes.service +
+            storageRecords[2] * recordSizes.employee +
+            storageRecords[3] * recordSizes.location +
+            storageRecords[4] * recordSizes.schedule;
+            
+          currentUsage = Math.ceil(totalStorageKB / (1024 * 1024)); // Convert KB to GB
           break;
 
         case 'apiRequestsPerDay': {

@@ -13,6 +13,8 @@ async function main() {
       data: {
         name: 'Demo Salon',
         subdomain: 'demo',
+        email: 'contact@demosalon.com',
+        notificationEmail: 'notifications@demosalon.com',
         features: {}, // Empty JSON object
       },
     });
@@ -35,6 +37,7 @@ async function main() {
         data: {
           name: 'Haircut',
           duration: 30, // 30 minutes
+          price: 25.00, // Adding price
           tenant: {
             connect: { id: tenant.id },
           },
@@ -44,6 +47,7 @@ async function main() {
         data: {
           name: 'Hair Coloring',
           duration: 120, // 2 hours
+          price: 80.00, // Adding price
           tenant: {
             connect: { id: tenant.id },
           },
@@ -53,6 +57,7 @@ async function main() {
         data: {
           name: 'Manicure',
           duration: 45, // 45 minutes
+          price: 35.00, // Adding price
           tenant: {
             connect: { id: tenant.id },
           },
@@ -198,6 +203,8 @@ async function main() {
       data: {
         name: 'Itinari Travel',
         subdomain: 'itinaritravel',
+        email: 'contact@itinaritravel.com',
+        notificationEmail: 'alerts@itinaritravel.com',
         features: {}, // Empty JSON object
       },
     });

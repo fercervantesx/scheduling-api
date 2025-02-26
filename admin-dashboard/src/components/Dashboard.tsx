@@ -6,8 +6,9 @@ import Services from './sections/Services';
 import Schedules from './sections/Schedules';
 import Tenants from './sections/Tenants';
 import MyPlan from './sections/MyPlan';
+import Branding from './sections/Branding';
 
-type TabType = 'tenants' | 'locations' | 'employees' | 'services' | 'schedules' | 'appointments' | 'availability' | 'plan';
+type TabType = 'tenants' | 'locations' | 'employees' | 'services' | 'schedules' | 'appointments' | 'availability' | 'plan' | 'branding';
 
 interface DashboardProps {
   activeTab: TabType;
@@ -32,6 +33,8 @@ export default function Dashboard({ activeTab }: DashboardProps) {
         return <Availability />;
       case 'plan':
         return <MyPlan />;
+      case 'branding':
+        return <Branding />;
       default:
         return <Locations />;
     }

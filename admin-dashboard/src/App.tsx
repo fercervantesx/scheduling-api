@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { useState, useMemo } from 'react';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
+import { BrandingProvider, useBranding } from './context/BrandingContext';
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,11 @@ const baseNavigationItems = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   )},
+  { id: 'branding', label: 'Branding', icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+    </svg>
+  )},
   { id: 'plan', label: 'My Plan', icon: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -55,6 +61,7 @@ type NavigationItemId = typeof baseNavigationItems[number]['id'];
 
 function AppContent() {
   const { isAuthenticated, loginWithRedirect, logout, user } = useAuth0();
+  const { branding } = useBranding();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<NavigationItemId>('locations');
   
@@ -105,7 +112,7 @@ function AppContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h1 className="text-xl font-semibold ml-4">Scheduling Admin Dashboard</h1>
+          <h1 className="text-xl font-semibold ml-4 text-primary">Scheduling Admin Dashboard</h1>
         </div>
       </header>
 
@@ -146,8 +153,8 @@ function AppContent() {
                 className={`
                   flex items-center w-full px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 ease-in-out group
                   ${activeTab === item.id
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-primary bg-opacity-10 text-white'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-primary'
                   }
                 `}
               >
@@ -162,6 +169,7 @@ function AppContent() {
             <button
               onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
               className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-colors duration-150 ease-in-out group"
+              style={{ color: 'rgb(220, 38, 38)' }} /* Hard-coded red for danger action */
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -197,8 +205,10 @@ export default function App() {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <Toaster position="top-right" />
-        <AppContent />
+        <BrandingProvider>
+          <Toaster position="top-right" />
+          <AppContent />
+        </BrandingProvider>
       </QueryClientProvider>
     </Auth0Provider>
   );

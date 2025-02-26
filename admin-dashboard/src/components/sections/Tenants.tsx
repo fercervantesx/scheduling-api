@@ -11,6 +11,7 @@ interface TenantFormData {
   name: string;
   subdomain: string;
   customDomain?: string;
+  notificationEmail?: string;
   plan: PlanId;
   features: Record<FeatureKey, boolean>;
 }
@@ -36,6 +37,7 @@ export default function Tenants() {
   const [formData, setFormData] = useState<TenantFormData>({
     name: '',
     subdomain: '',
+    notificationEmail: '',
     plan: 'FREE',
     features: {
       customBranding: false,
@@ -100,6 +102,7 @@ export default function Tenants() {
       setFormData({
         name: '',
         subdomain: '',
+        notificationEmail: '',
         plan: 'FREE',
         features: {
           customBranding: false,
@@ -402,6 +405,21 @@ export default function Tenants() {
                     onChange={(e) => setFormData({ ...formData, customDomain: e.target.value })}
                     placeholder="app.example.com"
                   />
+                </div>
+
+                <div className="mb-4">
+                  <label htmlFor="notificationEmail" className="block text-sm font-medium text-gray-700">
+                    Notification Email
+                  </label>
+                  <input
+                    type="email"
+                    id="notificationEmail"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    value={formData.notificationEmail || ''}
+                    onChange={(e) => setFormData({ ...formData, notificationEmail: e.target.value })}
+                    placeholder="notifications@example.com"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Email address for system notifications and alerts</p>
                 </div>
 
                 <div className="mb-4">

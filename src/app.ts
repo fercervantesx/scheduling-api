@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import tenantsRouter from './routes/admin/tenants';
+import tenantRouter from './routes/tenant';
 import { resolveTenant, enforceTenantIsolation } from './middleware/tenant';
 import { PLANS } from './config/tenant-plans';
 
@@ -9,6 +11,9 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Debug endpoint that doesn't require tenant resolution
 app.get('/raw-debug', (req, res) => {
@@ -96,6 +101,9 @@ app.get('/api/tenant/plan', (req, res) => {
 app.use('/api/admin/tenants', tenantsRouter);
 // Also register without /api prefix for direct access
 app.use('/admin/tenants', tenantsRouter);
+
+// Tenant routes
+app.use('/api/tenant', tenantRouter);
 
 // Generic error handlers will be added in index.ts
 

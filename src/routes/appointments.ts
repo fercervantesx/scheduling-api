@@ -9,15 +9,6 @@ const router = Router();
 router.get('/', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
   const { locationId, employeeId, status, startDate, endDate } = req.query;
   
-  console.log('Appointments route - Headers:', {
-    authorization: req.headers.authorization,
-    contentType: req.headers['content-type'],
-  });
-
-  console.log('Appointments route - User info:', {
-    user: req.user,
-    permissions: req.user?.permissions,
-  });
 
   try {
     const where: Prisma.AppointmentWhereInput = {};

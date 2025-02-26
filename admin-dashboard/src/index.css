@@ -2,13 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-gray-50;
-  }
-}
-
 :root {
+  /* Default branding colors - will be overridden by JS */
+  --primary-color: #3b82f6;
+  --secondary-color: #10b981;
+  
+  /* Font settings */
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -16,6 +15,62 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50;
+  }
+  
+  /* Brand color utility classes */
+  .bg-primary {
+    background-color: var(--primary-color);
+  }
+  
+  .bg-secondary {
+    background-color: var(--secondary-color);
+  }
+  
+  .text-primary {
+    color: var(--primary-color);
+  }
+  
+  .text-secondary {
+    color: var(--secondary-color);
+  }
+  
+  .border-primary {
+    border-color: var(--primary-color);
+  }
+  
+  .border-secondary {
+    border-color: var(--secondary-color);
+  }
+  
+  /* Hover states */
+  .hover\:bg-primary:hover {
+    background-color: var(--primary-color);
+  }
+  
+  .hover\:bg-primary-dark:hover {
+    background-color: color-mix(in srgb, var(--primary-color) 80%, black);
+  }
+  
+  .hover\:bg-secondary:hover {
+    background-color: var(--secondary-color);
+  }
+  
+  .hover\:text-primary:hover {
+    color: var(--primary-color);
+  }
+  
+  .hover\:text-secondary:hover {
+    color: var(--secondary-color);
+  }
+  
+  .hover\:border-primary:hover {
+    border-color: var(--primary-color);
+  }
 }
 
 body {

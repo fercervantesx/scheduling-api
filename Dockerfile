@@ -16,6 +16,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Install TypeScript definitions for nodemailer
+RUN npm install --save-dev @types/nodemailer
+
 # Generate Prisma client
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
 RUN npx prisma generate

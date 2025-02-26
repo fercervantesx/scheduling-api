@@ -7,6 +7,7 @@ import api from '../../utils/api';
 interface ServiceFormData {
   name: string;
   duration: number;
+  price?: number;
 }
 
 export default function Services() {
@@ -16,6 +17,7 @@ export default function Services() {
   const [formData, setFormData] = useState<ServiceFormData>({
     name: '',
     duration: 30,
+    price: undefined,
   });
 
   const { data: services = [], isLoading } = useQuery({
@@ -40,7 +42,7 @@ export default function Services() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['services'] });
       setIsModalOpen(false);
-      setFormData({ name: '', duration: 30 });
+      setFormData({ name: '', duration: 30, price: undefined });
       toast.success('Service created successfully');
     },
     onError: () => {
@@ -96,6 +98,7 @@ export default function Services() {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (minutes)</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -104,6 +107,9 @@ export default function Services() {
               <tr key={service.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{service.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{service.duration} minutes</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {service.price ? `$${service.price.toFixed(2)}` : 'N/A'}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <button
                     className="text-red-600 hover:text-red-900"
@@ -164,6 +170,28 @@ export default function Services() {
                     required
                   />
                   <p className="mt-1 text-sm text-gray-500">Estimated time for this service (max 8 hours)</p>
+                </div>
+
+                <div className="mb-4">
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                    Price
+                  </label>
+                  <input
+                    type="number"
+                    id="price"
+                    step="0.01"
+                    min="0"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    value={formData.price !== undefined ? formData.price : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData({ 
+                        ...formData, 
+                        price: value === '' ? undefined : parseFloat(value) 
+                      });
+                    }}
+                  />
+                  <p className="mt-1 text-sm text-gray-500">Leave empty if the service has no fixed price</p>
                 </div>
 
                 <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">

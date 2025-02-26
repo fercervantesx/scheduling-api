@@ -117,7 +117,6 @@ const extractTenantFromRequest = async (req: Request): Promise<PrismaTenant | nu
     
     return tenant;
   } catch (error) {
-    console.error('💥 Error in extractTenantFromRequest:', error);
     return null;
   }
 };
@@ -163,7 +162,6 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
         next();
         return;
       } else {
-        console.log('No default tenant found for development. Creating one...');
         
         // Create a default tenant for development
         const newTenant = await prisma.tenant.create({
@@ -240,7 +238,6 @@ export const resolveTenant = async (req: Request, res: Response, next: NextFunct
 
     next();
   } catch (error) {
-    console.error('Tenant resolution error:', error);
     res.status(500).json({ error: 'Failed to resolve tenant' });
   }
 };

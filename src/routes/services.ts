@@ -20,7 +20,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // Create a new service
 router.post('/', checkJwt, async (req: Request, res: Response) => {
-  const { name, duration } = req.body;
+  const { name, duration, price } = req.body;
 
   try {
     const service = await prisma.service.create({
@@ -31,7 +31,8 @@ router.post('/', checkJwt, async (req: Request, res: Response) => {
           connect: {
             id: req.tenant?.id
           }
-        }
+        },
+        ...(price !== undefined ? { price: parseFloat(price) } : {})
       },
     });
     return res.status(201).json(service);
