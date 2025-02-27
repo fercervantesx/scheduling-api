@@ -31,6 +31,11 @@ export class AppointmentsService {
     
     if (filters.status) {
       query.eq('status', filters.status);
+    } else if (filters.pastDue) {
+      // Special handling for past due appointments
+      const now = new Date();
+      query.eq('status', 'SCHEDULED')
+           .lt('start_time', now.toISOString());
     }
     
     if (filters.startDate || filters.endDate) {
@@ -54,7 +59,25 @@ export class AppointmentsService {
       throw new Error(`Failed to fetch appointments: ${error.message}`);
     }
 
-    return data.map(this.mapToAppointment);
+    // Add isPastDue flag for the frontend to use
+    const now = new Date();
+    const appointmentsWithMetadata = data.map(appointment => {
+      const appointmentTime = new Date(appointment.start_time);
+      const isPastDue = appointment.status === 'SCHEDULED' && appointmentTime < now;
+      return {
+        ...appointment,
+        isPastDue
+      };
+    });
+    
+    return appointmentsWithMetadata.map(this.mapToAppointment);
+  }
+  
+  // Process a batch of past appointments
+  private async processPastAppointmentsBatch(appointments: any[], tenantId: string): Promise<void> {
+    for (const appointment of appointments) {
+      await this.autoFulfillPastAppointment(appointment.id, tenantId);
+    }
   }
 
   async findOne(id: string, tenantId: string): Promise<Appointment> {
@@ -73,8 +96,28 @@ export class AppointmentsService {
     if (error || !data) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
     }
+    
+      // No auto-fulfillment on access - will be handled by daily cron job
 
     return this.mapToAppointment(data);
+  }
+  
+  // Helper method to auto-fulfill a past appointment
+  private async autoFulfillPastAppointment(id: string, tenantId: string): Promise<void> {
+    const { error } = await this.supabase.supabase
+      .from('appointments')
+      .update({
+        status: AppointmentStatus.FULFILLED,
+        fulfillment_date: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .eq('status', AppointmentStatus.SCHEDULED);
+    
+    if (error) {
+      console.error(`Failed to auto-fulfill past appointment ${id}: ${error.message}`);
+    }
   }
 
   async create(createAppointmentDto: CreateAppointmentDto, tenantId: string, userInfo: any): Promise<Appointment> {
@@ -257,7 +300,7 @@ export class AppointmentsService {
     return this.mapToAppointment(data);
   }
 
-  async remove(id: string, tenantId: string): Promise<void> {
+  async remove(id: string, tenantId: string, cancelReason?: string): Promise<void> {
     // First, get the appointment to check its status and date
     const { data: appointment, error: fetchError } = await this.supabase.supabase
       .from('appointments')
@@ -273,11 +316,30 @@ export class AppointmentsService {
     const now = new Date();
     const isAppointmentPast = new Date(appointment.start_time) < now;
     const isCancelled = appointment.status === 'CANCELLED';
-
+    
+    // If not cancelled or past, handle cancellation flow instead of deletion
     if (!isAppointmentPast && !isCancelled) {
-      throw new BadRequestException(
-        'Cannot delete appointment. It must be either cancelled or past its scheduled date.'
-      );
+      // If cancel reason provided, mark as cancelled instead of attempting to delete
+      if (cancelReason) {
+        const { error: updateError } = await this.supabase.supabase
+          .from('appointments')
+          .update({
+            status: 'CANCELLED',
+            cancel_reason: cancelReason,
+            canceled_by: 'client' // Assume client cancellation by default
+          })
+          .eq('id', id)
+          .eq('tenant_id', tenantId);
+          
+        if (updateError) {
+          throw new Error(`Failed to cancel appointment: ${updateError.message}`);
+        }
+        return;
+      } else {
+        throw new BadRequestException(
+          'Cannot delete appointment. It must be either cancelled or past its scheduled date.'
+        );
+      }
     }
 
     // If validation passes, delete the appointment
@@ -308,6 +370,7 @@ export class AppointmentsService {
       userId: data.user_id,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
+      isPastDue: data.isPastDue || false,
     };
   }
 }

@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { AppointmentsService } from '../services/appointments.service';
 import { CreateAppointmentDto } from '../dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../dto/update-appointment.dto';
+import { CancelAppointmentDto } from '../dto/cancel-appointment.dto';
 import { AuthGuard } from '../../../common/guards/auth.guard';
 import { Request } from 'express';
 
@@ -46,6 +47,7 @@ export class AppointmentsController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'pastDue', required: false, description: 'Filter for past due appointments (not fulfilled or cancelled)' })
   @ApiResponse({ status: 200, description: 'Returns all appointments matching the criteria.' })
   findAll(@Query() query: any, @Req() req: Request) {
     if (!req.tenant) {
@@ -58,6 +60,7 @@ export class AppointmentsController {
       status: query.status,
       startDate: query.startDate,
       endDate: query.endDate,
+      pastDue: query.pastDue === 'true',
       userId: req.user?.user_id,
       // Check if user has admin permissions
       isAdmin: req.user?.permissions?.includes('admin'),
@@ -97,15 +100,15 @@ export class AppointmentsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete an appointment' })
-  @ApiResponse({ status: 204, description: 'The appointment has been successfully deleted.' })
-  @ApiResponse({ status: 400, description: 'Bad request - appointment must be cancelled or past date.' })
+  @ApiOperation({ summary: 'Delete or cancel an appointment' })
+  @ApiResponse({ status: 204, description: 'The appointment has been successfully cancelled or deleted.' })
+  @ApiResponse({ status: 400, description: 'Bad request.' })
   @ApiResponse({ status: 404, description: 'Appointment not found.' })
-  async remove(@Param('id') id: string, @Req() req: Request) {
+  async remove(@Param('id') id: string, @Body() cancelData: CancelAppointmentDto, @Req() req: Request) {
     if (!req.tenant) {
       throw new Error('Tenant context required');
     }
     
-    await this.appointmentsService.remove(id, req.tenant.id);
+    await this.appointmentsService.remove(id, req.tenant.id, cancelData.cancel_reason);
   }
 }

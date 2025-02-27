@@ -1,5 +1,5 @@
 import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useState, useMemo } from 'react';
 import Dashboard from './components/Dashboard';
@@ -12,6 +12,12 @@ const baseNavigationItems = [
   { id: 'tenants', label: 'Tenants', icon: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+  )},
+  { id: 'pastDueAppointments', label: 'Past Due', icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <circle cx="18" cy="6" r="3" fill="#ef4444" stroke="none" />
     </svg>
   )},
   { id: 'locations', label: 'Locations', icon: (
@@ -69,6 +75,30 @@ function AppContent() {
   const { branding: _ } = useBranding(); // Branding is available but not currently used
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<NavigationItemId>('locations');
+  const [pastDueCount, setPastDueCount] = useState(0);
+  
+  // Fetch past due appointments count when the user is authenticated
+  const { getAccessTokenSilently } = useAuth0();
+  
+  useQuery({
+    queryKey: ['pastDueAppointmentsCount'],
+    queryFn: async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/appointments?pastDue=true`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await response.json();
+        setPastDueCount(data.length);
+        return data.length;
+      } catch (error) {
+        console.error('Error fetching past due appointments:', error);
+        return 0;
+      }
+    },
+    refetchInterval: 60000, // Refetch every minute
+    enabled: isAuthenticated,
+  });
   
   // Check if we're on the system admin dashboard
   const isSystemAdmin = useMemo(() => {
@@ -78,7 +108,7 @@ function AppContent() {
            hostname === '127.0.0.1';
   }, []);
 
-  // Filter navigation items based on user role
+  // Filter navigation items based on user role and past due count
   const navigationItems = useMemo(() => {
     return baseNavigationItems.filter(item => {
       // Only show Tenants tab to system admins
@@ -89,9 +119,13 @@ function AppContent() {
       if (item.id === 'plan' && isSystemAdmin) {
         return false;
       }
+      // Only show Past Due tab if there are past due appointments
+      if (item.id === 'pastDueAppointments' && pastDueCount === 0) {
+        return false;
+      }
       return true;
     });
-  }, [isSystemAdmin]);
+  }, [isSystemAdmin, pastDueCount]);
 
   if (!isAuthenticated) {
     return <Login onLogin={loginWithRedirect} />;
@@ -165,6 +199,11 @@ function AppContent() {
               >
                 {item.icon}
                 <span className="ml-3">{item.label}</span>
+                {item.id === 'pastDueAppointments' && pastDueCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">
+                    {pastDueCount}
+                  </span>
+                )}
               </button>
             ))}
           </nav>

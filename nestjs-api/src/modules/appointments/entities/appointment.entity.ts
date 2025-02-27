@@ -42,4 +42,7 @@ export class Appointment {
 
   @ApiProperty({ description: 'When the appointment was last updated' })
   updatedAt: Date;
+  
+  @ApiProperty({ description: 'Flag indicating if appointment is past due', required: false })
+  isPastDue?: boolean;
 }
