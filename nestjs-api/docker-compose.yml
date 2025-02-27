@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  nestjs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scheduling-api-nest
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    # Add any other environment variables you need
+    # - SUPABASE_URL=your_supabase_url
+    # - SUPABASE_SERVICE_ROLE_KEY=your_supabase_key
+    restart: unless-stopped
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - scheduling-network
+
+networks:
+  scheduling-network:
+    driver: bridge

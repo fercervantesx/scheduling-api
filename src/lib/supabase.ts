@@ -19,18 +19,16 @@ export const setTenantContext = async (tenantId: string) => {
 };
 
 // Function to create a client scoped to a specific tenant
-export const getTenantScopedClient = (tenantId: string) => {
-  const client = supabase.auth.setSession({
+export const getTenantScopedClient = async (tenantId: string) => {
+  const { data, error } = await supabase.auth.setSession({
     access_token: '',
     refresh_token: '',
   });
   
   // Set tenant ID in PostgreSQL session - this will make RLS work
-  client.then(({ data, error }) => {
-    if (!error && data?.session) {
-      return setTenantContext(tenantId);
-    }
-  });
+  if (!error && data?.session) {
+    await setTenantContext(tenantId);
+  }
   
   return supabase;
 };
@@ -127,8 +125,6 @@ export const extractTenantFromRequest = async (req: Request): Promise<any> => {
     }
     
     // Handle custom domains and subdomains
-    let tenant = null;
-    
     if (subdomain) {
       // Try to find by subdomain first
       const { data: tenantBySubdomain, error } = await supabase
@@ -171,7 +167,7 @@ export const uploadTenantFile = async (
     // Format path with tenant ID for isolation (uses RLS policies)
     const filePath = `${tenantId}/${filename}`;
     
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('tenant-uploads')
       .upload(filePath, fileBuffer, {
         contentType,

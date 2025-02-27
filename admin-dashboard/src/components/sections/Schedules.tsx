@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
 interface WeekdaySchedule {
-  weekday: string;
+  weekday: string; // Stored as string but represents a number (0-6)
   startTime: string;
   endTime: string;
 }
@@ -14,18 +14,33 @@ interface ScheduleFormData {
   employeeId: string;
   locationId: string;
   schedules: WeekdaySchedule[];
-  blockType: 'WORKING_HOURS' | 'BREAK' | 'VACATION';
+  blockType: 'WORK' | 'BREAK' | 'UNAVAILABLE';
 }
 
 const WEEKDAYS = [
-  { value: 'MONDAY', label: 'Monday' },
-  { value: 'TUESDAY', label: 'Tuesday' },
-  { value: 'WEDNESDAY', label: 'Wednesday' },
-  { value: 'THURSDAY', label: 'Thursday' },
-  { value: 'FRIDAY', label: 'Friday' },
-  { value: 'SATURDAY', label: 'Saturday' },
-  { value: 'SUNDAY', label: 'Sunday' },
+  { value: '1', label: 'Monday' },
+  { value: '2', label: 'Tuesday' },
+  { value: '3', label: 'Wednesday' },
+  { value: '4', label: 'Thursday' },
+  { value: '5', label: 'Friday' },
+  { value: '6', label: 'Saturday' },
+  { value: '0', label: 'Sunday' },
 ];
+
+// Helper function to convert weekday number to name
+const getWeekdayName = (weekday: string | number): string => {
+  const weekdayNumber = typeof weekday === 'string' ? parseInt(weekday, 10) : weekday;
+  switch (weekdayNumber) {
+    case 0: return 'Sunday';
+    case 1: return 'Monday';
+    case 2: return 'Tuesday';
+    case 3: return 'Wednesday';
+    case 4: return 'Thursday';
+    case 5: return 'Friday';
+    case 6: return 'Saturday';
+    default: return 'Unknown';
+  }
+};
 
 type SortField = 'employee' | 'location' | 'weekday' | 'startTime' | 'endTime' | 'blockType';
 type SortDirection = 'asc' | 'desc';
@@ -38,7 +53,7 @@ export default function Schedules() {
     employeeId: '',
     locationId: '',
     schedules: [],
-    blockType: 'WORKING_HOURS',
+    blockType: 'WORK',
   });
   
   // Add sorting and filtering state
@@ -46,22 +61,7 @@ export default function Schedules() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [employeeFilter, setEmployeeFilter] = useState<string>('');
 
-  const { data: schedules = [], isLoading: isLoadingSchedules, error: _schedulesError } = useQuery({
-    queryKey: ['schedules'],
-    queryFn: async () => {
-      try {
-        const token = await getAccessTokenSilently();
-        const response = await api.get('/schedules', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        return response.data;
-      } catch (error: any) {
-        console.error('Schedules fetch error:', error.response?.data || error);
-        throw error;
-      }
-    },
-  });
-
+  // First load employees and locations to use in schedule processing
   const { data: employees = [] } = useQuery({
     queryKey: ['employees'],
     queryFn: async () => {
@@ -69,6 +69,7 @@ export default function Schedules() {
       const response = await api.get('/employees', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      console.log('Employees data:', response.data);
       return response.data;
     },
   });
@@ -84,6 +85,40 @@ export default function Schedules() {
     },
   });
 
+  // Then load schedules, adding employee and location information
+  const { data: schedules = [], isLoading: isLoadingSchedules, error: _schedulesError } = useQuery({
+    queryKey: ['schedules'],
+    queryFn: async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        const response = await api.get('/schedules', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        console.log('Schedules data:', response.data);
+        
+        // Add employee and location fields for compatibility
+        const enhancedSchedules = Array.isArray(response.data) ? response.data.map((schedule: any) => {
+          // Find employee and location information using their IDs
+          const employee = employees.find((e: any) => e.id === schedule.employeeId) || { name: 'Unknown' };
+          const location = locations.find((l: any) => l.id === schedule.locationId) || { name: 'Unknown' };
+          
+          return {
+            ...schedule,
+            employee: { name: employee.name },
+            location: { name: location.name }
+          };
+        }) : [];
+        
+        return enhancedSchedules;
+      } catch (error: any) {
+        console.error('Schedules fetch error:', error.response?.data || error);
+        throw error;
+      }
+    },
+    // Make sure to only query schedules after employees and locations are loaded
+    enabled: employees.length > 0 && locations.length > 0,
+  });
+
   const createSchedule = useMutation({
     mutationFn: async (data: ScheduleFormData) => {
       const token = await getAccessTokenSilently();
@@ -96,7 +131,7 @@ export default function Schedules() {
           locationId: data.locationId,
           startTime: schedule.startTime,
           endTime: schedule.endTime,
-          weekday: schedule.weekday,
+          weekday: parseInt(schedule.weekday, 10), // Convert string to number
           blockType: data.blockType,
         };
         
@@ -122,7 +157,7 @@ export default function Schedules() {
         employeeId: '',
         locationId: '',
         schedules: [],
-        blockType: 'WORKING_HOURS',
+        blockType: 'WORK',
       });
       toast.success('Schedule(s) created successfully');
     },
@@ -192,9 +227,15 @@ export default function Schedules() {
   };
 
   const filteredEmployees = formData.locationId
-    ? employees.filter((emp: any) =>
-        emp.locations.some((loc: any) => loc.locationId === formData.locationId)
-      )
+    ? employees.filter((emp: any) => {
+        // Check if employee has locations
+        if (!emp.locations || !Array.isArray(emp.locations)) {
+          console.log('Employee missing locations array:', emp);
+          return false;
+        }
+        // In the updated structure, locations is an array of location objects directly
+        return emp.locations.some((loc: any) => loc.id === formData.locationId);
+      })
     : employees;
 
   // Sorting function
@@ -382,10 +423,18 @@ export default function Schedules() {
               <tr key={schedule.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.employee.name}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.location.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.weekday}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getWeekdayName(schedule.weekday)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.startTime}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.endTime}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{schedule.blockType}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                    ${schedule.blockType === 'WORK' ? 'bg-green-100 text-green-800' : 
+                     schedule.blockType === 'BREAK' ? 'bg-yellow-100 text-yellow-800' : 
+                     'bg-red-100 text-red-800'}`}>
+                    {schedule.blockType === 'WORK' ? 'Working Hours' : 
+                     schedule.blockType === 'BREAK' ? 'Break' : 'Unavailable'}
+                  </span>
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <button
                     className="text-red-600 hover:text-red-900"
@@ -517,9 +566,9 @@ export default function Schedules() {
                     onChange={(e) => setFormData({ ...formData, blockType: e.target.value as any })}
                     required
                   >
-                    <option value="WORKING_HOURS">Working Hours</option>
+                    <option value="WORK">Working Hours</option>
                     <option value="BREAK">Break</option>
-                    <option value="VACATION">Vacation</option>
+                    <option value="UNAVAILABLE">Unavailable</option>
                   </select>
                 </div>
 

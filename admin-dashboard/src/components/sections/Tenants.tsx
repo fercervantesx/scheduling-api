@@ -11,9 +11,8 @@ interface TenantFormData {
   name: string;
   subdomain: string;
   customDomain?: string;
-  notificationEmail?: string;
+  email?: string;
   plan: PlanId;
-  features: Record<FeatureKey, boolean>;
 }
 
 const PLANS = [
@@ -37,18 +36,11 @@ export default function Tenants() {
   const [formData, setFormData] = useState<TenantFormData>({
     name: '',
     subdomain: '',
-    notificationEmail: '',
+    email: '',
     plan: 'FREE',
-    features: {
-      customBranding: false,
-      apiAccess: false,
-      webhooks: false,
-      multipleLocations: false,
-      analytics: false,
-    },
   });
 
-  const { data: tenants = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
       try {
@@ -64,6 +56,8 @@ export default function Tenants() {
       }
     },
   });
+  
+  const tenants = data?.tenants || [];
   
   // Using underscore prefix for unused variables to avoid TypeScript warnings
   const { /* data: tenantDetails, */ isLoading: _isDetailLoading } = useQuery({
@@ -102,15 +96,8 @@ export default function Tenants() {
       setFormData({
         name: '',
         subdomain: '',
-        notificationEmail: '',
+        email: '',
         plan: 'FREE',
-        features: {
-          customBranding: false,
-          apiAccess: false,
-          webhooks: false,
-          multipleLocations: false,
-          analytics: false,
-        },
       });
       toast.success('Tenant created successfully');
     },
@@ -122,7 +109,7 @@ export default function Tenants() {
   const updateTenantStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const token = await getAccessTokenSilently();
-      const response = await api.patch(`/admin/tenants/${id}/status`, { status }, {
+      const response = await api.patch(`/admin/tenants/${id}`, { status }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return response.data;
@@ -131,7 +118,8 @@ export default function Tenants() {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       toast.success('Tenant status updated');
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error updating tenant status:', error);
       toast.error('Failed to update tenant status');
     },
   });
@@ -145,13 +133,6 @@ export default function Tenants() {
     setFormData(prev => ({
       ...prev,
       plan,
-      features: {
-        customBranding: FEATURES.customBranding.plans.includes(plan as any),
-        apiAccess: FEATURES.apiAccess.plans.includes(plan as any),
-        webhooks: FEATURES.webhooks.plans.includes(plan as any),
-        multipleLocations: FEATURES.multipleLocations.plans.includes(plan as any),
-        analytics: FEATURES.analytics.plans.includes(plan as any),
-      },
     }));
   };
 
@@ -408,18 +389,19 @@ export default function Tenants() {
                 </div>
 
                 <div className="mb-4">
-                  <label htmlFor="notificationEmail" className="block text-sm font-medium text-gray-700">
-                    Notification Email
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    Admin Email <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
-                    id="notificationEmail"
+                    id="email"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    value={formData.notificationEmail || ''}
-                    onChange={(e) => setFormData({ ...formData, notificationEmail: e.target.value })}
-                    placeholder="notifications@example.com"
+                    value={formData.email || ''}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="admin@example.com"
+                    required
                   />
-                  <p className="mt-1 text-xs text-gray-500">Email address for system notifications and alerts</p>
+                  <p className="mt-1 text-xs text-gray-500">Email address for the tenant administrator</p>
                 </div>
 
                 <div className="mb-4">
@@ -446,34 +428,35 @@ export default function Tenants() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Features</label>
-                  <div className="space-y-2">
-                    {Object.entries(FEATURES).map(([key, feature]) => (
-                      <div key={key} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id={key}
-                          checked={formData.features[key as keyof typeof formData.features]}
-                          disabled={!feature.plans.includes(formData.plan)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            features: {
-                              ...prev.features,
-                              [key]: e.target.checked
-                            }
-                          }))}
-                        />
-                        <label htmlFor={key} className="ml-2 block text-sm text-gray-900">
-                          {feature.label}
-                          {!feature.plans.includes(formData.plan) && (
-                            <span className="ml-2 text-xs text-gray-500">
-                              (Available in {feature.plans.join(' & ')})
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Features Included</label>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 className="font-medium text-gray-700 mb-3">{PLANS.find(p => p.id === formData.plan)?.name} Plan Includes:</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(FEATURES).map(([key, feature]) => {
+                        const isIncluded = feature.plans.includes(formData.plan);
+                        return (
+                          <div key={key} className={`flex items-center p-2 rounded ${isIncluded ? 'bg-blue-50' : 'opacity-60'}`}>
+                            {isIncluded ? (
+                              <svg className="h-5 w-5 text-blue-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <svg className="h-5 w-5 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                            <span className={`${isIncluded ? 'font-medium' : 'text-gray-500'}`}>
+                              {feature.label}
+                              {!isIncluded && (
+                                <span className="ml-1 text-xs text-gray-500">
+                                  (Available in {feature.plans.join(' & ')})
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </label>
-                      </div>
-                    ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

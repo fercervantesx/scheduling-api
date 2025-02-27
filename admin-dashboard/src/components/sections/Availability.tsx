@@ -11,6 +11,18 @@ interface AvailabilityFormData {
   date: Date | null;
 }
 
+interface TimeSlot {
+  time: string;
+  available: boolean;
+  employeeId: string;
+  employeeName: string;
+}
+
+interface AvailabilityResponse {
+  date: string;
+  timeSlots: TimeSlot[];
+}
+
 /* 
   This type represents time slots returned from the API.
   We're using a type annotation on the map function parameters 
@@ -60,11 +72,11 @@ export default function Availability() {
     },
   });
 
-  const { data: availabilityData = { slots: [] }, isLoading: isLoadingSlots } = useQuery({
+  const { data: availabilityData = { date: '', timeSlots: [] }, isLoading: isLoadingSlots } = useQuery({
     queryKey: ['availability', formData],
     queryFn: async () => {
       if (!formData.locationId || !formData.employeeId || !formData.serviceId || !formData.date) {
-        return { slots: [] };
+        return { date: '', timeSlots: [] } as AvailabilityResponse;
       }
 
       const token = await getAccessTokenSilently();
@@ -77,13 +89,13 @@ export default function Availability() {
           date: formData.date.toISOString().split('T')[0],
         },
       });
-      return response.data;
+      return response.data as AvailabilityResponse;
     },
     enabled: !!(formData.locationId && formData.employeeId && formData.serviceId && formData.date),
   });
   
   // Extract slots from the response
-  const availableSlots = availabilityData.slots || [];
+  const availableSlots = availabilityData.timeSlots || [];
 
   const createAppointment = useMutation({
     mutationFn: async ({ startTime }: { startTime: string }) => {
@@ -94,7 +106,7 @@ export default function Availability() {
           serviceId: formData.serviceId,
           locationId: formData.locationId,
           employeeId: formData.employeeId,
-          startTime,
+          startTime: `${formData.date?.toISOString().split('T')[0]}T${startTime}:00`,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -124,7 +136,7 @@ export default function Availability() {
     },
   });
 
-  const handleBookSlot = (startTime: string) => {
+  const handleBookSlot = (time: string) => {
     if (!formData.serviceId || !formData.locationId || !formData.employeeId) {
       toast.error('Please select all required fields', {
         duration: 3000,
@@ -135,11 +147,14 @@ export default function Availability() {
       });
       return;
     }
-    createAppointment.mutate({ startTime });
+    createAppointment.mutate({ startTime: time });
   };
 
-  const formatTimeSlot = (isoString: string) => {
-    const date = new Date(isoString);
+  const formatTimeSlot = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const date = new Date();
+    date.setHours(parseInt(hours, 10));
+    date.setMinutes(parseInt(minutes, 10));
     return date.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -229,30 +244,27 @@ export default function Availability() {
             <p className="text-gray-500">No available slots for the selected criteria</p>
           ) : (
             <div className="grid grid-cols-3 gap-4">
-              {availableSlots.map((slot: any, index: number) => (
+              {availableSlots.map((slot: TimeSlot, index: number) => (
                 <button
                   key={index}
-                  onClick={() => handleBookSlot(slot.startTime)}
-                  disabled={createAppointment.isPending}
+                  onClick={() => handleBookSlot(slot.time)}
+                  disabled={createAppointment.isPending || !slot.available}
                   className={`
                     p-4 rounded-lg text-center transition-colors duration-200
                     ${createAppointment.isPending
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : !slot.available
+                      ? 'bg-red-50 text-red-700 cursor-not-allowed'
                       : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
                     }
                   `}
                 >
                   <div className="font-medium">
-                    {slot.localStartTime || formatTimeSlot(slot.startTime)}
+                    {formatTimeSlot(slot.time)}
                   </div>
                   <div className="text-sm opacity-75">
-                    to {slot.localEndTime || formatTimeSlot(slot.endTime)}
+                    {slot.employeeName}
                   </div>
-                  {slot.displayTime && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {slot.displayTime}
-                    </div>
-                  )}
                 </button>
               ))}
             </div>

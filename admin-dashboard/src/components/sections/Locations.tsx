@@ -75,7 +75,7 @@ export default function Locations() {
   const updateLocation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: LocationFormData }) => {
       const token = await getAccessTokenSilently();
-      const response = await api.put(`/locations/${id}`, data, {
+      const response = await api.patch(`/locations/${id}`, data, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return response.data;
@@ -87,7 +87,8 @@ export default function Locations() {
       setFormData({ name: '', address: '' });
       toast.success('Location updated successfully');
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error updating location:', error);
       toast.error('Failed to update location');
     },
   });

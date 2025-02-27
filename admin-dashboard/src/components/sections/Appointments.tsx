@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth0 } from '@auth0/auth0-react';
 import toast from 'react-hot-toast';
@@ -81,12 +81,18 @@ interface Appointment {
 }
 
 interface AvailabilitySlot {
-  startTime: string;
-  endTime: string;
+  startTime?: string;  // Old API format
+  endTime?: string;    // Old API format
+  time?: string;       // New API format
+  available?: boolean; // New API format
+  employeeId?: string; // New API format
+  employeeName?: string; // New API format
 }
 
 interface AvailabilityResponse {
-  slots: AvailabilitySlot[];
+  slots?: AvailabilitySlot[];  // Old API format
+  timeSlots?: AvailabilitySlot[]; // New API format
+  date?: string;               // New API format
 }
 
 export default function Appointments() {
@@ -117,17 +123,6 @@ export default function Appointments() {
   });
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
-  const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery<Appointment[]>({
-    queryKey: ['appointments'],
-    queryFn: async () => {
-      const token = await getAccessTokenSilently();
-      const response = await api.get('/appointments', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data;
-    },
-  });
-
   const { data: locations = [] } = useQuery<Location[]>({
     queryKey: ['locations'],
     queryFn: async () => {
@@ -150,22 +145,6 @@ export default function Appointments() {
     },
   });
 
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ['employees', formData.locationId],
-    queryFn: async () => {
-      if (!formData.locationId) return [];
-      const token = await getAccessTokenSilently();
-      const response = await api.get<Employee[]>('/employees', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.data.filter((employee) =>
-        employee.locations.some((loc) => loc.locationId === formData.locationId)
-      );
-    },
-    enabled: !!formData.locationId,
-  });
-
-  // Get all employees for filtering
   const { data: allEmployees = [] } = useQuery<Employee[]>({
     queryKey: ['all-employees'],
     queryFn: async () => {
@@ -177,11 +156,87 @@ export default function Appointments() {
     },
   });
 
-  const { data: availabilityData = { slots: [] as AvailabilitySlot[] }, isLoading: _isLoadingSlots } = useQuery<AvailabilityResponse>({
+  const { data: appointments = [], isLoading: isLoadingAppointments } = useQuery<Appointment[]>({
+    queryKey: ['appointments'],
+    queryFn: async () => {
+      const token = await getAccessTokenSilently();
+      const response = await api.get('/appointments', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      console.log('Appointments data:', response.data);
+      
+      // Add employee, location, and service objects for compatibility if needed
+      const enhancedAppointments = Array.isArray(response.data) ? response.data.map((appointment: any) => {
+        // Find referenced entities by their IDs
+        const employee = allEmployees.find((e: any) => e.id === appointment.employeeId) || { name: 'Unknown' };
+        const location = locations.find((l: any) => l.id === appointment.locationId) || { name: 'Unknown' };
+        const service = services.find((s: any) => s.id === appointment.serviceId) || { name: 'Unknown' };
+        
+        return {
+          ...appointment,
+          employee: { name: employee.name },
+          location: { name: location.name },
+          service: { name: service.name }
+        };
+      }) : [];
+      
+      return enhancedAppointments;
+    },
+    // Make sure to only query after dependent data is loaded
+    enabled: allEmployees.length > 0 && locations.length > 0 && services.length > 0,
+  });
+
+  // Query for employees filtered by selected location (for the appointment form)
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ['employees-by-location', formData.locationId],
+    queryFn: async () => {
+      if (!formData.locationId) return [];
+      
+      // Add some debug logging
+      console.log('All employees:', allEmployees);
+      console.log('Selected location ID:', formData.locationId);
+      
+      // Create a more flexible filtering approach to match different API formats
+      return allEmployees.filter((employee) => {
+        if (!employee.locations || !Array.isArray(employee.locations)) {
+          return false;
+        }
+        
+        // Check various location formats that might exist in the data
+        return employee.locations.some((loc) => {
+          // Check if loc is directly a location ID
+          if (typeof loc === 'string') {
+            return loc === formData.locationId;
+          }
+          
+          // Check if loc has a locationId property (flat structure)
+          if (loc.locationId) {
+            return loc.locationId === formData.locationId;
+          }
+          
+          // Check if loc has a location object with an id (nested structure)
+          if (loc.location && loc.location.id) {
+            return loc.location.id === formData.locationId;
+          }
+          
+          // If loc itself has an id property
+          if (loc.id) {
+            return loc.id === formData.locationId;
+          }
+          
+          return false;
+        });
+      });
+    },
+    enabled: !!formData.locationId && allEmployees.length > 0,
+  });
+
+  const { data: availabilityData = { slots: [], timeSlots: [] }, isLoading: _isLoadingSlots } = useQuery<AvailabilityResponse>({
     queryKey: ['availability', formData],
     queryFn: async () => {
       if (!formData.locationId || !formData.employeeId || !formData.serviceId || !formData.date) {
-        return { slots: [] };
+        return { slots: [], timeSlots: [] };
       }
 
       const token = await getAccessTokenSilently();
@@ -194,13 +249,29 @@ export default function Appointments() {
           date: formData.date.toISOString().split('T')[0],
         },
       });
+      
+      console.log('Availability response:', response.data);
       return response.data;
     },
     enabled: !!(formData.locationId && formData.employeeId && formData.serviceId && formData.date),
   });
   
-  // Extract slots from the response
-  const availableSlots = availabilityData.slots || [];
+  // Extract slots from the response - handle both old and new API formats
+  const availableSlots = useMemo(() => {
+    // Check if we have the new API format with timeSlots
+    if (availabilityData.timeSlots && availabilityData.timeSlots.length > 0) {
+      // Convert the new format to match what the UI expects
+      return availabilityData.timeSlots
+        .filter(slot => slot.available)
+        .map(slot => ({
+          startTime: `${availabilityData.date}T${slot.time}:00`,
+          endTime: '', // Not used in UI rendering
+        }));
+    }
+    
+    // Fall back to old format if it exists
+    return availabilityData.slots || [];
+  }, [availabilityData]);
 
   const createAppointment = useMutation({
     mutationFn: async (data: CreateAppointmentData) => {
@@ -830,28 +901,41 @@ export default function Appointments() {
                       Available Time Slots
                     </label>
                     <div className="grid grid-cols-3 gap-2">
-                      {availableSlots.map((slot, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          className={`p-2 text-sm rounded-md ${
-                            formData.selectedSlot?.getTime() === new Date(slot.startTime).getTime()
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                          }`}
-                          onClick={() => setFormData({
-                            ...formData,
-                            selectedSlot: new Date(slot.startTime),
-                          })}
-                        >
-                          {new Date(slot.startTime).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true,
-                            timeZone: 'UTC'
-                          })}
-                        </button>
-                      ))}
+                      {availableSlots.map((slot, index) => {
+                        // Make sure we can create a valid date from the startTime
+                        const startTime = slot.startTime;
+                        if (!startTime) return null;
+                        
+                        try {
+                          const date = new Date(startTime);
+                          if (isNaN(date.getTime())) return null;
+                          
+                          return (
+                            <button
+                              key={index}
+                              type="button"
+                              className={`p-2 text-sm rounded-md ${
+                                formData.selectedSlot?.getTime() === date.getTime()
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                              }`}
+                              onClick={() => setFormData({
+                                ...formData,
+                                selectedSlot: date,
+                              })}
+                            >
+                              {date.toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
+                            </button>
+                          );
+                        } catch (e) {
+                          console.error("Error with date format:", e);
+                          return null;
+                        }
+                      })}
                     </div>
                   </div>
                 )}

@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
+import { prisma } from '../lib/prisma';
 import { checkJwt, decodeUserInfo } from '../middleware/auth';
 import { z } from 'zod';
-import path from 'path';
-import fs from 'fs';
 import { upload, uploadToSupabase, deleteFromSupabase } from '../middleware/tenant';
 import { supabase } from '../lib/supabase';
 
@@ -33,7 +32,6 @@ router.get('/plan', [checkJwt, decodeUserInfo], async (req: Request, res: Respon
       features
     });
   } catch (error) {
-    console.error('Error getting tenant plan:', error);
     return res.status(500).json({ error: 'Failed to get tenant plan' });
   }
 });
@@ -53,7 +51,6 @@ router.get('/features', [checkJwt, decodeUserInfo], async (req: Request, res: Re
 
     return res.json({ features });
   } catch (error) {
-    console.error('Error getting tenant features:', error);
     return res.status(500).json({ error: 'Failed to get tenant features' });
   }
 });
@@ -75,32 +72,15 @@ router.get('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: Re
 
     return res.json(req.tenant.branding || {});
   } catch (error) {
-    console.error('Error getting tenant branding:', error);
     return res.status(500).json({ error: 'Failed to get tenant branding' });
   }
 });
 
 // Update tenant branding
 const brandingSchema = z.object({
-  logo: z.union([
-    z.string().url(),
-    z.string().max(0),  // Empty string
-    z.null()
-  ]).optional(),
-  background: z.union([
-    z.string().url(),
-    z.string().max(0),  // Empty string
-    z.null()
-  ]).optional(),
-  hero: z.union([
-    z.string().url(),
-    z.string().max(0),  // Empty string
-    z.null()
-  ]).optional(),
+  logo: z.string().url().optional().nullable(),
   primaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
   secondaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
-  accentColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
-  fontFamily: z.string().optional(),
 });
 
 router.patch('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: Response) => {
@@ -121,16 +101,12 @@ router.patch('/branding', [checkJwt, decodeUserInfo], async (req: Request, res: 
     const brandingData = brandingSchema.parse(req.body);
 
     // Update tenant branding
-    const { error } = await supabase
-      .from('tenants')
-      .update({
+    await prisma.tenant.update({
+      where: { id: req.tenant.id },
+      data: {
         branding: brandingData
-      })
-      .eq('id', req.tenant.id);
-
-    if (error) {
-      throw error;
-    }
+      }
+    });
 
     return res.json({ message: 'Branding updated successfully' });
   } catch (error) {

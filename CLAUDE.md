@@ -10,6 +10,10 @@
 - `npm run prisma:generate` - Generate Prisma Client
 - `npm run prisma:migrate` - Run database migrations
 
+## NestJS API Commands
+- `cd nestjs-api && npm run build` - Build the NestJS API (run this after making changes to verify there are no build errors)
+- `cd nestjs-api && npm run start:dev` - Start the NestJS API in development mode
+
 ## Docker Development
 
 ### Running with source mounted (for development):

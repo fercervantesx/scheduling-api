@@ -142,7 +142,7 @@ export default function Employees() {
   
   const handleEdit = (employee: any) => {
     // Extract location IDs from the employee object
-    const locationIds = employee.locations.map((loc: any) => loc.location.id);
+    const locationIds = employee.locations.map((loc: any) => loc.id);
     
     setFormData({
       id: employee.id,
@@ -328,10 +328,10 @@ export default function Employees() {
                   <div className="flex flex-wrap gap-1">
                     {employee.locations.map((loc: any) => (
                       <span
-                        key={loc.location.id}
+                        key={loc.id}
                         className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
                       >
-                        {loc.location.name}
+                        {loc.name}
                       </span>
                     ))}
                   </div>
